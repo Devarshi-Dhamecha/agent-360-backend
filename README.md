@@ -7,18 +7,25 @@ Django backend with PostgreSQL database integration.
 ### Prerequisites
 - Python 3.12+
 - PostgreSQL 12+
+- `uv` package manager
 
-### Installation
+### Installation with `uv`
 
-1. Create virtual environment:
+1. Install `uv` (if not already installed):
 ```bash
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+# Using pip
+pip install uv
+
+# Or using your system package manager
+# macOS: brew install uv
+# Linux: curl -LsSf https://astral.sh/uv/install.sh | sh
 ```
 
-2. Install dependencies:
+2. Create virtual environment and install dependencies:
 ```bash
-pip install -e .
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv sync
 ```
 
 3. Configure environment:
@@ -42,6 +49,19 @@ python manage.py createsuperuser
 python manage.py runserver
 ```
 
+### Alternative: Installation with pip
+
+If you prefer using pip instead of `uv`:
+
+```bash
+# Create virtual environment
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+# Install dependencies
+pip install -e .
+```
+
 ## Database
 
 PostgreSQL is configured as the default database. Connection settings are managed via environment variables in `.env`.
@@ -61,6 +81,47 @@ python manage.py shell
 >>> check_database_connection()
 ```
 
+## Common Commands
+
+### Using `uv`
+
+```bash
+# Sync dependencies
+uv sync
+
+# Run Python commands
+uv run python manage.py migrate
+uv run python manage.py runserver
+
+# Add new dependency
+uv pip install package-name
+
+# Update dependencies
+uv sync --upgrade
+```
+
+### Using Django
+
+```bash
+# Create migrations
+python manage.py makemigrations
+
+# Apply migrations
+python manage.py migrate
+
+# Create superuser
+python manage.py createsuperuser
+
+# Run development server
+python manage.py runserver
+
+# Access Django shell
+python manage.py shell
+
+# Run tests
+python manage.py test
+```
+
 ## Project Structure
 
 ```
@@ -74,7 +135,15 @@ python manage.py shell
 │   └── db.py            # Database utilities
 ├── manage.py            # Django management script
 ├── pyproject.toml       # Project dependencies
-└── .env.example         # Environment variables template
+├── .env.example         # Environment variables template
+└── docs/                # Documentation
+    ├── README.md        # Documentation index
+    ├── PROJECT_STRUCTURE.md
+    ├── CODE_STANDARDS.md
+    ├── DEVELOPMENT_WORKFLOW.md
+    ├── API_DOCUMENTATION.md
+    ├── DATABASE_SCHEMA.md
+    └── DEPLOYMENT.md
 ```
 
 ## Dependencies
@@ -83,3 +152,15 @@ python manage.py shell
 - **psycopg**: PostgreSQL adapter
 - **python-dotenv**: Environment variable management
 - **gunicorn**: Production WSGI server
+
+## Documentation
+
+For comprehensive guides on development, deployment, and best practices, see the [docs/README.md](./docs/README.md) file.
+
+Key documentation files:
+- **[PROJECT_STRUCTURE.md](./docs/PROJECT_STRUCTURE.md)** - Folder layout and organization
+- **[CODE_STANDARDS.md](./docs/CODE_STANDARDS.md)** - Coding standards and best practices
+- **[DEVELOPMENT_WORKFLOW.md](./docs/DEVELOPMENT_WORKFLOW.md)** - Development guide
+- **[API_DOCUMENTATION.md](./docs/API_DOCUMENTATION.md)** - API design and endpoints
+- **[DATABASE_SCHEMA.md](./docs/DATABASE_SCHEMA.md)** - Database design
+- **[DEPLOYMENT.md](./docs/DEPLOYMENT.md)** - Deployment guide
