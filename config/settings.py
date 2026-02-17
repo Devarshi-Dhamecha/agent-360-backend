@@ -12,7 +12,7 @@ load_dotenv()
 BASE_DIR = Path(__file__).resolve().parent.parent
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-change-me-in-production')
+SECRET_KEY = os.getenv('SECRET_KEY', 'django-insecure-change-this-in-production')
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = os.getenv('DEBUG', 'False') == 'True'
@@ -27,7 +27,20 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    
+    # Agent 360 modules — ORDER MATTERS for migrations
+    'apps.users',
+    'apps.accounts',
+    'apps.products',
+    'apps.agreements',
+    'apps.invoices',
+    'apps.campaigns',
+    'apps.cases',
+    'apps.forecasts',
 ]
+
+# Custom User Model
+AUTH_USER_MODEL = 'users.Users'
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
