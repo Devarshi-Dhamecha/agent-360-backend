@@ -1,28 +1,18 @@
 from django.contrib import admin
-from .models import RecordType, Campaign, Task
-
-
-@admin.register(RecordType)
-class RecordTypeAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'developer_name', 'sobject_type', 'is_active']
-    search_fields = ['name', 'developer_name']
-    list_filter = ['is_active', 'sobject_type']
-    readonly_fields = ['created_date']
+from .models import Campaign, Task
 
 
 @admin.register(Campaign)
 class CampaignAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'type', 'status', 'owner', 'start_date', 'end_date', 'is_active']
-    search_fields = ['name']
-    list_filter = ['status', 'type', 'is_active']
-    raw_id_fields = ['record_type', 'parent', 'owner', 'created_by', 'last_modified_by']
-    readonly_fields = ['created_date', 'last_modified_date']
+    list_display = ('cmp_sf_id', 'cmp_name', 'cmp_status', 'cmp_owner_id', 'cmp_start_date', 'cmp_end_date')
+    list_filter = ('cmp_status', 'cmp_is_active', 'cmp_active')
+    search_fields = ('cmp_name', 'cmp_sf_id')
+    date_hierarchy = 'cmp_start_date'
 
 
 @admin.register(Task)
 class TaskAdmin(admin.ModelAdmin):
-    list_display = ['id', 'subject', 'owner', 'status', 'priority', 'activity_date', 'is_closed']
-    search_fields = ['subject']
-    list_filter = ['status', 'priority', 'is_closed']
-    raw_id_fields = ['owner', 'created_by', 'last_modified_by']
-    readonly_fields = ['created_date', 'last_modified_date']
+    list_display = ('tsk_sf_id', 'tsk_subject', 'tsk_status', 'tsk_priority', 'tsk_owner_id', 'tsk_activity_date')
+    list_filter = ('tsk_status', 'tsk_priority', 'tsk_active')
+    search_fields = ('tsk_subject', 'tsk_description', 'tsk_sf_id')
+    date_hierarchy = 'tsk_activity_date'

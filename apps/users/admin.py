@@ -1,36 +1,31 @@
 from django.contrib import admin
-from django.contrib.auth.admin import UserAdmin as BaseUserAdmin
-from .models import Profile, UserRole, Users
-
-
-@admin.register(Profile)
-class ProfileAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'created_date', 'last_modified_date']
-    search_fields = ['name']
-    list_filter = ['created_date']
+from .models import UserRole, User, RecordType, UserLoginLog
 
 
 @admin.register(UserRole)
 class UserRoleAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'parent_role', 'created_date']
-    search_fields = ['name']
-    list_filter = ['created_date']
-    raw_id_fields = ['parent_role']
+    list_display = ('ur_sf_id', 'ur_name', 'ur_active', 'ur_created_at')
+    list_filter = ('ur_active',)
+    search_fields = ('ur_name', 'ur_sf_id')
 
 
-@admin.register(Users)
-class UsersAdmin(BaseUserAdmin):
-    list_display = ['username', 'email', 'name', 'is_active', 'is_staff', 'profile']
-    search_fields = ['username', 'email', 'first_name', 'last_name', 'name']
-    list_filter = ['is_active', 'is_staff', 'profile']
-    
-    fieldsets = (
-        (None, {'fields': ('id', 'username', 'password')}),
-        ('Personal Info', {'fields': ('first_name', 'last_name', 'name', 'email')}),
-        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'groups', 'user_permissions')}),
-        ('Organization', {'fields': ('profile', 'user_role', 'manager')}),
-        ('Audit', {'fields': ('last_modified_by', 'created_date', 'last_modified_date')}),
-    )
-    
-    readonly_fields = ['created_date', 'last_modified_date']
-    raw_id_fields = ['profile', 'user_role', 'manager', 'last_modified_by']
+@admin.register(User)
+class UserAdmin(admin.ModelAdmin):
+    list_display = ('usr_sf_id', 'usr_name', 'usr_email', 'usr_is_active', 'usr_user_role_id')
+    list_filter = ('usr_is_active', 'usr_active')
+    search_fields = ('usr_name', 'usr_email', 'usr_username', 'usr_sf_id')
+
+
+@admin.register(RecordType)
+class RecordTypeAdmin(admin.ModelAdmin):
+    list_display = ('rt_sf_id', 'rt_name', 'rt_developer_name', 'rt_sobject_type', 'rt_is_active')
+    list_filter = ('rt_is_active', 'rt_sobject_type')
+    search_fields = ('rt_name', 'rt_developer_name', 'rt_sf_id')
+
+
+@admin.register(UserLoginLog)
+class UserLoginLogAdmin(admin.ModelAdmin):
+    list_display = ('ull_id', 'ull_user_sf_id', 'ull_login_at', 'ull_ip_address')
+    list_filter = ('ull_login_at',)
+    search_fields = ('ull_ip_address',)
+    readonly_fields = ('ull_login_at',)

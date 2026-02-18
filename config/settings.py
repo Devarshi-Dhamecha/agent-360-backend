@@ -35,15 +35,11 @@ INSTALLED_APPS = [
     'apps.users',
     'apps.accounts',
     'apps.products',
-    'apps.agreements',
-    'apps.invoices',
     'apps.campaigns',
     'apps.cases',
-    'apps.forecasts',
+    'apps.sync',
+    'apps.ai_assistant',
 ]
-
-# Custom User Model
-AUTH_USER_MODEL = 'users.Users'
 
 # Django REST Framework Configuration
 REST_FRAMEWORK = {

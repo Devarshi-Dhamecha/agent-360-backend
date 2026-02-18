@@ -6,5 +6,5 @@ from django.urls import path, include
 
 urlpatterns = [
     path('admin/', admin.site.urls),
-    path('api/analytics/', include('apps.analytics.urls')),
+    # API endpoints will be added here
 ]

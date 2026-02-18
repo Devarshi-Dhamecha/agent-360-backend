@@ -1,19 +1,39 @@
 from django.contrib import admin
-from .models import ProductBrand, Product
+from .models import ProductBrand, Product, Invoice, InvoiceLineItem, ArfRollingForecast
 
 
 @admin.register(ProductBrand)
 class ProductBrandAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'is_active', 'created_date']
-    search_fields = ['name']
-    list_filter = ['is_active', 'created_date']
-    readonly_fields = ['created_date', 'last_modified_date']
+    list_display = ('pb_sf_id', 'pb_name', 'pb_brand_code', 'pb_is_active', 'pb_active')
+    list_filter = ('pb_is_active', 'pb_active')
+    search_fields = ('pb_name', 'pb_brand_code', 'pb_sf_id')
 
 
 @admin.register(Product)
 class ProductAdmin(admin.ModelAdmin):
-    list_display = ['id', 'name', 'product_code', 'family', 'product_brand', 'is_active']
-    search_fields = ['name', 'product_code', 'central_product_code']
-    list_filter = ['is_active', 'family', 'product_brand']
-    raw_id_fields = ['product_brand', 'created_by', 'last_modified_by']
-    readonly_fields = ['created_date', 'last_modified_date']
+    list_display = ('prd_sf_id', 'prd_name', 'prd_family', 'prd_product_code', 'prd_is_active')
+    list_filter = ('prd_family', 'prd_is_active', 'prd_active')
+    search_fields = ('prd_name', 'prd_product_code', 'prd_central_product_code', 'prd_sf_id')
+
+
+@admin.register(Invoice)
+class InvoiceAdmin(admin.ModelAdmin):
+    list_display = ('inv_sf_id', 'inv_name', 'inv_account_id', 'inv_invoice_date', 'inv_status', 'inv_net_price')
+    list_filter = ('inv_status', 'inv_invoice_type', 'inv_active')
+    search_fields = ('inv_name', 'inv_sf_id')
+    date_hierarchy = 'inv_invoice_date'
+
+
+@admin.register(InvoiceLineItem)
+class InvoiceLineItemAdmin(admin.ModelAdmin):
+    list_display = ('ili_sf_id', 'ili_invoice_id', 'ili_product_id', 'ili_quantity', 'ili_net_price', 'ili_status')
+    list_filter = ('ili_status', 'ili_valid', 'ili_active')
+    search_fields = ('ili_unique_line_code', 'ili_sf_id')
+
+
+@admin.register(ArfRollingForecast)
+class ArfRollingForecastAdmin(admin.ModelAdmin):
+    list_display = ('arf_id', 'arf_name', 'arf_account_id', 'arf_status', 'arf_forecast_date', 'arf_sync_status')
+    list_filter = ('arf_status', 'arf_sync_status', 'arf_active')
+    search_fields = ('arf_name', 'arf_sf_id')
+    date_hierarchy = 'arf_forecast_date'
