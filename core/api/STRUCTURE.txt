@@ -1,0 +1,162 @@
+API Response System - Folder Structure
+=====================================
+
+core/api/
+│
+├── __init__.py                          # Main exports
+├── README.md                            # Complete documentation
+├── EXAMPLES.md                          # Implementation examples
+│
+├── responses/                           # Response Handlers
+│   ├── __init__.py                     # Module exports
+│   ├── base.py                         # APIResponse (base class)
+│   │   └── Methods:
+│   │       ├── success()               # Generic success
+│   │       ├── error()                 # Generic error
+│   │       ├── created()               # 201 Created
+│   │       ├── updated()               # 200 Updated
+│   │       ├── deleted()               # 200 Deleted
+│   │       ├── no_content()            # 204 No Content
+│   │       └── paginated()             # Paginated response
+│   │
+│   ├── success.py                      # SuccessResponse helpers
+│   │   └── Methods:
+│   │       ├── retrieve()              # GET single
+│   │       ├── list()                  # GET list
+│   │       ├── create()                # POST create
+│   │       ├── update()                # PUT/PATCH update
+│   │       ├── delete()                # DELETE
+│   │       ├── login()                 # Login success
+│   │       ├── logout()                # Logout success
+│   │       ├── register()              # Registration
+│   │       └── custom()                # Custom success
+│   │
+│   └── error.py                        # ErrorResponse helpers
+│       └── Methods:
+│           ├── bad_request()           # 400
+│           ├── unauthorized()          # 401
+│           ├── forbidden()             # 403
+│           ├── not_found()             # 404
+│           ├── conflict()              # 409
+│           ├── validation_error()      # 422
+│           ├── server_error()          # 500
+│           ├── invalid_credentials()   # 401 - Invalid login
+│           ├── token_expired()         # 401 - Token expired
+│           ├── permission_denied()     # 403 - No permission
+│           └── resource_not_found()    # 404 - Specific resource
+│
+├── exceptions/                          # Custom Exceptions
+│   ├── __init__.py                     # Module exports
+│   ├── base.py                         # Exception classes
+│   │   └── Classes (20+ exceptions):
+│   │       ├── BaseAPIException
+│   │       ├── InvalidCredentialsException
+│   │       ├── TokenExpiredException
+│   │       ├── UnauthorizedException
+│   │       ├── PermissionDeniedException
+│   │       ├── ResourceNotFoundException
+│   │       ├── ValidationException
+│   │       ├── BusinessLogicException
+│   │       └── ... (see full list in base.py)
+│   │
+│   └── handler.py                      # Exception handler
+│       └── Functions:
+│           ├── custom_exception_handler()
+│           └── format_validation_errors()
+│
+├── serializers/                         # Base Serializers
+│   ├── __init__.py                     # Module exports
+│   └── base.py                         # Serializer classes
+│       └── Classes:
+│           ├── BaseRequestSerializer
+│           ├── BaseResponseSerializer
+│           ├── BaseModelSerializer
+│           ├── TimestampedSerializer
+│           ├── AuditedSerializer
+│           ├── PaginationSerializer
+│           ├── ListRequestSerializer
+│           ├── BulkOperationSerializer
+│           └── IDListRequestSerializer
+│
+└── utils/                               # Utilities
+    ├── __init__.py                     # Module exports
+    ├── pagination.py                   # Pagination classes
+    │   └── Classes:
+    │       ├── StandardPagination      # 20/page (max 100)
+    │       ├── LargePagination         # 50/page (max 200)
+    │       └── SmallPagination         # 10/page (max 50)
+    │
+    └── validators.py                   # Custom validators
+        └── Functions:
+            ├── validate_salesforce_id()
+            ├── validate_email()
+            ├── validate_phone_number()
+            ├── validate_positive_number()
+            ├── validate_date_range()
+            ├── validate_currency_code()
+            ├── validate_percentage()
+            └── validate_status_transition()
+
+
+Quick Import Reference:
+======================
+
+# Responses
+from core.api.responses import APIResponse, SuccessResponse, ErrorResponse
+
+# Exceptions
+from core.api.exceptions import (
+    ResourceNotFoundException,
+    ValidationException,
+    UnauthorizedException,
+    custom_exception_handler
+)
+
+# Serializers
+from core.api.serializers import (
+    BaseModelSerializer,
+    AuditedSerializer,
+    ListRequestSerializer
+)
+
+# Utils
+from core.api.utils import StandardPagination
+
+
+Usage Examples:
+==============
+
+1. Success Response:
+   return SuccessResponse.retrieve(data=serializer.data)
+
+2. Error Response:
+   raise ResourceNotFoundException("User", user_id)
+
+3. Pagination:
+   paginator = StandardPagination()
+   return paginator.get_paginated_response(serializer.data)
+
+4. Validation:
+   from core.api.utils import validate_salesforce_id
+   validate_salesforce_id(id_value)
+
+
+Response Format:
+===============
+
+Success:
+{
+    "success": true,
+    "message": "...",
+    "data": {...},
+    "meta": {...}
+}
+
+Error:
+{
+    "success": false,
+    "message": "...",
+    "error_code": "...",
+    "errors": [...]
+}
+
