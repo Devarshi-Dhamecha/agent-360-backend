@@ -3,6 +3,7 @@ Complaints & Cases API views.
 """
 from datetime import datetime
 from django.db.models import Count, Q
+from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError
@@ -68,6 +69,68 @@ class CaseSummaryAPIView(APIView):
         )
 
 
+@extend_schema(
+    parameters=[
+        OpenApiParameter(
+            name='status',
+            type=str,
+            location=OpenApiParameter.QUERY,
+            description='Filter by status: open, closed, or all',
+            required=False,
+            enum=['open', 'closed', 'all'],
+        ),
+        OpenApiParameter(
+            name='search',
+            type=str,
+            location=OpenApiParameter.QUERY,
+            description='Search in subject and case number',
+            required=False,
+        ),
+        OpenApiParameter(
+            name='account_id',
+            type=str,
+            location=OpenApiParameter.QUERY,
+            description='Filter by account Salesforce ID',
+            required=False,
+        ),
+        OpenApiParameter(
+            name='opened_from',
+            type=str,
+            location=OpenApiParameter.QUERY,
+            description='Opened date from (YYYY-MM-DD)',
+            required=False,
+        ),
+        OpenApiParameter(
+            name='opened_to',
+            type=str,
+            location=OpenApiParameter.QUERY,
+            description='Opened date to (YYYY-MM-DD)',
+            required=False,
+        ),
+        OpenApiParameter(
+            name='ordering',
+            type=str,
+            location=OpenApiParameter.QUERY,
+            description='Sort order',
+            required=False,
+            enum=['opened_at', '-opened_at', 'last_modified', '-last_modified'],
+        ),
+        OpenApiParameter(
+            name='page',
+            type=int,
+            location=OpenApiParameter.QUERY,
+            description='Page number',
+            required=False,
+        ),
+        OpenApiParameter(
+            name='page_size',
+            type=int,
+            location=OpenApiParameter.QUERY,
+            description='Page size (max 100)',
+            required=False,
+        ),
+    ],
+)
 class CaseListAPIView(APIView):
     """GET /api/complaints-cases - list with filters, ordering, pagination."""
     permission_classes = [AllowAny]
