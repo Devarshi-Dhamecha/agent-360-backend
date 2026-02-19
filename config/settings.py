@@ -30,6 +30,7 @@ INSTALLED_APPS = [
     
     # Third-party apps
     'rest_framework',
+    'drf_spectacular',
     
     # Agent 360 modules — ORDER MATTERS for migrations
     'apps.users',
@@ -65,6 +66,8 @@ REST_FRAMEWORK = {
     'TIME_FORMAT': '%H:%M:%S',
     'NON_FIELD_ERRORS_KEY': 'non_field_errors',
     'TEST_REQUEST_DEFAULT_FORMAT': 'json',
+    'DEFAULT_SCHEMA_CLASS': 'drf_spectacular.openapi.AutoSchema',
+
 }
 
 MIDDLEWARE = [
