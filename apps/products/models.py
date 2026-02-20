@@ -709,3 +709,315 @@ class ArfRollingForecast(models.Model):
 
     def __str__(self):
         return self.arf_name
+
+
+class Order(models.Model):
+    """Salesforce Order - customer orders"""
+    ord_sf_id = models.CharField(
+        max_length=18,
+        primary_key=True,
+        db_column='ord_sf_id',
+        verbose_name='Salesforce ID'
+    )
+    ord_order_number = models.CharField(
+        max_length=30,
+        db_column='ord_order_number',
+        verbose_name='Order Number'
+    )
+    ord_account_id = models.ForeignKey(
+        'accounts.Account',
+        to_field='acc_sf_id',
+        on_delete=models.CASCADE,
+        db_column='ord_account_id',
+        verbose_name='Account'
+    )
+    ord_status = models.CharField(
+        max_length=100,
+        db_column='ord_status',
+        verbose_name='Status'
+    )
+    ord_effective_date = models.DateField(
+        db_column='ord_effective_date',
+        verbose_name='Order Start Date'
+    )
+    ord_end_date = models.DateField(
+        null=True,
+        blank=True,
+        db_column='ord_end_date',
+        verbose_name='End Date'
+    )
+    ord_type = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        db_column='ord_type',
+        verbose_name='Type'
+    )
+    ord_total_amount = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='ord_total_amount',
+        verbose_name='Total Amount'
+    )
+    ord_open_amount = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='ord_open_amount',
+        verbose_name='Open Amount'
+    )
+    ord_open_quantity = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='ord_open_quantity',
+        verbose_name='Open Quantity'
+    )
+    ord_open_amount_tax = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='ord_open_amount_tax',
+        verbose_name='Open Amount with Tax'
+    )
+    ord_ordered_quantity = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='ord_ordered_quantity',
+        verbose_name='Ordered Quantity'
+    )
+    ord_ordered_amount_tax = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='ord_ordered_amount_tax',
+        verbose_name='Ordered Amount with Tax'
+    )
+    ord_currency_iso_code = models.CharField(
+        max_length=10,
+        null=True,
+        blank=True,
+        db_column='ord_currency_iso_code',
+        verbose_name='Currency ISO Code'
+    )
+    ord_owner_id = models.ForeignKey(
+        'users.User',
+        to_field='usr_sf_id',
+        on_delete=models.RESTRICT,
+        db_column='ord_owner_id',
+        verbose_name='Owner'
+    )
+    ord_contract_id = models.CharField(
+        max_length=18,
+        null=True,
+        blank=True,
+        db_column='ord_contract_id',
+        verbose_name='Contract ID'
+    )
+    ord_sf_created_date = models.DateTimeField(
+        db_column='ord_sf_created_date',
+        verbose_name='SF Created Date'
+    )
+    ord_last_modified_date = models.DateTimeField(
+        db_column='ord_last_modified_date',
+        verbose_name='Last Modified Date'
+    )
+    ord_last_modified_by_id = models.CharField(
+        max_length=18,
+        db_column='ord_last_modified_by_id',
+        verbose_name='Last Modified By ID'
+    )
+    ord_active = models.SmallIntegerField(
+        default=1,
+        db_column='ord_active',
+        verbose_name='Active Flag'
+    )
+    ord_created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_column='ord_created_at',
+        verbose_name='Created At'
+    )
+    ord_updated_at = models.DateTimeField(
+        auto_now=True,
+        db_column='ord_updated_at',
+        verbose_name='Updated At'
+    )
+
+    class Meta:
+        db_table = 'orders'
+        verbose_name = 'Order'
+        verbose_name_plural = 'Orders'
+        indexes = [
+            models.Index(fields=['ord_account_id'], name='idx_orders_account'),
+            models.Index(fields=['ord_status'], name='idx_orders_status'),
+            models.Index(fields=['ord_effective_date'], name='idx_orders_effective_date'),
+            models.Index(fields=['ord_owner_id'], name='idx_orders_owner'),
+        ]
+
+    def __str__(self):
+        return self.ord_order_number
+
+
+class OrderLineItem(models.Model):
+    """Order Line Item - individual line items on orders"""
+    ori_sf_id = models.CharField(
+        max_length=18,
+        primary_key=True,
+        db_column='ori_sf_id',
+        verbose_name='Salesforce ID'
+    )
+    ori_order_id = models.ForeignKey(
+        'products.Order',
+        to_field='ord_sf_id',
+        on_delete=models.CASCADE,
+        db_column='ori_order_id',
+        verbose_name='Order'
+    )
+    ori_product_id = models.ForeignKey(
+        'products.Product',
+        to_field='prd_sf_id',
+        on_delete=models.RESTRICT,
+        db_column='ori_product_id',
+        verbose_name='Product'
+    )
+    ori_product_name = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        db_column='ori_product_name',
+        verbose_name='Product Name'
+    )
+    ori_product_code = models.CharField(
+        max_length=255,
+        null=True,
+        blank=True,
+        db_column='ori_product_code',
+        verbose_name='Product Code'
+    )
+    ori_quantity = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        db_column='ori_quantity',
+        verbose_name='Quantity'
+    )
+    ori_unit_price = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        db_column='ori_unit_price',
+        verbose_name='Unit Price'
+    )
+    ori_total_price = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='ori_total_price',
+        verbose_name='Total Price'
+    )
+    ori_open_amount = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='ori_open_amount',
+        verbose_name='Open Amount'
+    )
+    ori_open_amount_tax = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='ori_open_amount_tax',
+        verbose_name='Open Amount with Tax'
+    )
+    ori_open_quantity = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='ori_open_quantity',
+        verbose_name='Open Quantity'
+    )
+    ori_ordered_amount = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='ori_ordered_amount',
+        verbose_name='Ordered Amount'
+    )
+    ori_ordered_quantity = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='ori_ordered_quantity',
+        verbose_name='Ordered Quantity'
+    )
+    ori_status = models.CharField(
+        max_length=100,
+        null=True,
+        blank=True,
+        db_column='ori_status',
+        verbose_name='Status'
+    )
+    ori_description = models.TextField(
+        null=True,
+        blank=True,
+        db_column='ori_description',
+        verbose_name='Description'
+    )
+    ori_service_date = models.DateField(
+        null=True,
+        blank=True,
+        db_column='ori_service_date',
+        verbose_name='Service Date'
+    )
+    ori_sf_created_date = models.DateTimeField(
+        db_column='ori_sf_created_date',
+        verbose_name='SF Created Date'
+    )
+    ori_last_modified_date = models.DateTimeField(
+        db_column='ori_last_modified_date',
+        verbose_name='Last Modified Date'
+    )
+    ori_last_modified_by_id = models.CharField(
+        max_length=18,
+        db_column='ori_last_modified_by_id',
+        verbose_name='Last Modified By ID'
+    )
+    ori_active = models.SmallIntegerField(
+        default=1,
+        db_column='ori_active',
+        verbose_name='Active Flag'
+    )
+    ori_created_at = models.DateTimeField(
+        auto_now_add=True,
+        db_column='ori_created_at',
+        verbose_name='Created At'
+    )
+    ori_updated_at = models.DateTimeField(
+        auto_now=True,
+        db_column='ori_updated_at',
+        verbose_name='Updated At'
+    )
+
+    class Meta:
+        db_table = 'order_line_items'
+        verbose_name = 'Order Line Item'
+        verbose_name_plural = 'Order Line Items'
+        indexes = [
+            models.Index(fields=['ori_order_id'], name='idx_order_line_items_order'),
+            models.Index(fields=['ori_product_id'], name='idx_order_line_items_product'),
+        ]
+
+    def __str__(self):
+        return f"{self.ori_order_id} - {self.ori_product_id}"

@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import ProductBrand, Product, Invoice, InvoiceLineItem, ArfRollingForecast
+from .models import ProductBrand, Product, Invoice, InvoiceLineItem, ArfRollingForecast, Order, OrderLineItem
 
 
 @admin.register(ProductBrand)
@@ -37,3 +37,18 @@ class ArfRollingForecastAdmin(admin.ModelAdmin):
     list_filter = ('arf_status', 'arf_sync_status', 'arf_active')
     search_fields = ('arf_name', 'arf_sf_id')
     date_hierarchy = 'arf_forecast_date'
+
+
+@admin.register(Order)
+class OrderAdmin(admin.ModelAdmin):
+    list_display = ('ord_sf_id', 'ord_order_number', 'ord_account_id', 'ord_status', 'ord_effective_date', 'ord_total_amount')
+    list_filter = ('ord_status', 'ord_type', 'ord_active')
+    search_fields = ('ord_order_number', 'ord_sf_id')
+    date_hierarchy = 'ord_effective_date'
+
+
+@admin.register(OrderLineItem)
+class OrderLineItemAdmin(admin.ModelAdmin):
+    list_display = ('ori_sf_id', 'ori_order_id', 'ori_product_id', 'ori_quantity', 'ori_unit_price', 'ori_total_price', 'ori_status')
+    list_filter = ('ori_status', 'ori_active')
+    search_fields = ('ori_sf_id', 'ori_product_name', 'ori_product_code')
