@@ -31,6 +31,7 @@ INSTALLED_APPS = [
     # Third-party apps
     'rest_framework',
     'drf_spectacular',
+    'corsheaders',
     
     # Agent 360 modules — ORDER MATTERS for migrations
     'apps.users',
@@ -70,8 +71,47 @@ REST_FRAMEWORK = {
 
 }
 
+# DRF Spectacular (OpenAPI/Swagger) Configuration
+SPECTACULAR_SETTINGS = {
+    'TITLE': 'Agent 360 API',
+    'DESCRIPTION': 'API documentation for Agent 360 Backend',
+    'VERSION': '1.0.0',
+    'SERVE_INCLUDE_SCHEMA': False,
+    'COMPONENT_SPLIT_REQUEST': True,
+}
+
+# CORS Configuration
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+    "http://127.0.0.1:5173",
+]
+
+CORS_ALLOW_CREDENTIALS = True
+
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
+
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+]
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
+    'corsheaders.middleware.CorsMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',

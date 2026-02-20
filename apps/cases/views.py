@@ -119,20 +119,20 @@ class CaseSummaryAPIView(APIView):
             name='page',
             type=int,
             location=OpenApiParameter.QUERY,
-            description='Page number',
+            description='Page number (if provided, enables pagination)',
             required=False,
         ),
         OpenApiParameter(
             name='page_size',
             type=int,
             location=OpenApiParameter.QUERY,
-            description='Page size (max 100)',
+            description='Page size (max 100, if provided, enables pagination)',
             required=False,
         ),
     ],
 )
 class CaseListAPIView(APIView):
-    """GET /api/complaints-cases - list with filters, ordering, pagination."""
+    """GET /api/complaints-cases - list with filters, ordering, optional pagination."""
     permission_classes = [AllowAny]
 
     def get(self, request):
@@ -180,10 +180,23 @@ class CaseListAPIView(APIView):
 
         qs = qs.order_by(order_field)
 
-        paginator = StandardPagination()
-        page = paginator.paginate_queryset(qs, request)
-        serializer = CaseListSerializer(page, many=True)
-        return paginator.get_paginated_response(serializer.data)
+        # Check if pagination parameters are provided
+        page_param = request.query_params.get('page')
+        page_size_param = request.query_params.get('page_size')
+
+        # If either pagination parameter is provided, use pagination
+        if page_param is not None or page_size_param is not None:
+            paginator = StandardPagination()
+            page = paginator.paginate_queryset(qs, request)
+            serializer = CaseListSerializer(page, many=True)
+            return paginator.get_paginated_response(serializer.data)
+        
+        # Otherwise, return all data without pagination
+        serializer = CaseListSerializer(qs, many=True)
+        return APIResponse.success(
+            data=serializer.data,
+            message='Data retrieved successfully'
+        )
 
 
 class CaseDetailAPIView(APIView):

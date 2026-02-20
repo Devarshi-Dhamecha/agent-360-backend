@@ -34,7 +34,9 @@ class CampaignListWithTasksAPIView(APIView):
         description=(
             "Returns campaigns for a given account with mapped tasks.\n\n"
             "- type=all: all tasks mapped to the campaign\n"
-            "- type=my: only tasks owned by the given user (user_id required)"
+            "- type=my: only tasks owned by the given user (user_id required)\n\n"
+            "Pagination is optional. If page or page_size parameters are provided, "
+            "the response will be paginated. Otherwise, all data is returned."
         ),
         parameters=[
             OpenApiParameter(
@@ -60,6 +62,20 @@ class CampaignListWithTasksAPIView(APIView):
                 location=OpenApiParameter.QUERY,
                 required=False,
                 description="Filter type: 'all' (default) or 'my'",
+            ),
+            OpenApiParameter(
+                name='page',
+                type=int,
+                location=OpenApiParameter.QUERY,
+                description='Page number (if provided, enables pagination)',
+                required=False,
+            ),
+            OpenApiParameter(
+                name='page_size',
+                type=int,
+                location=OpenApiParameter.QUERY,
+                description='Page size (max 100, if provided, enables pagination)',
+                required=False,
             ),
         ],
         responses={200: CampaignWithTasksSerializer},
@@ -109,10 +125,19 @@ class CampaignListWithTasksAPIView(APIView):
             cmp_active=1,
         ).order_by("cmp_name")
 
-        paginator = StandardPagination()
-        page = paginator.paginate_queryset(campaigns_qs, request)
+        # Check if pagination parameters are provided
+        page_param = request.query_params.get('page')
+        page_size_param = request.query_params.get('page_size')
 
-        campaign_ids = [campaign.cmp_sf_id for campaign in page]
+        # If either pagination parameter is provided, use pagination
+        if page_param is not None or page_size_param is not None:
+            paginator = StandardPagination()
+            page = paginator.paginate_queryset(campaigns_qs, request)
+            campaign_ids = [campaign.cmp_sf_id for campaign in page]
+        else:
+            # Return all data without pagination
+            page = list(campaigns_qs)
+            campaign_ids = [campaign.cmp_sf_id for campaign in page]
 
         tasks_qs = Task.objects.filter(
             tsk_what_id_id__in=campaign_ids,
@@ -138,7 +163,16 @@ class CampaignListWithTasksAPIView(APIView):
             many=True,
             context=serializer_context,
         )
-        return paginator.get_paginated_response(serializer.data)
+        
+        # Return paginated or non-paginated response
+        if page_param is not None or page_size_param is not None:
+            return paginator.get_paginated_response(serializer.data)
+        else:
+            from core.api.responses import APIResponse
+            return APIResponse.success(
+                data=serializer.data,
+                message='Data retrieved successfully'
+            )
 
 
 class TaskListByCampaignAPIView(APIView):
@@ -154,7 +188,11 @@ class TaskListByCampaignAPIView(APIView):
     @extend_schema(
         tags=["Campaigns"],
         summary="List tasks by campaign",
-        description="Returns tasks mapped to the given Salesforce Campaign.",
+        description=(
+            "Returns tasks mapped to the given Salesforce Campaign.\n\n"
+            "Pagination is optional. If page or page_size parameters are provided, "
+            "the response will be paginated. Otherwise, all data is returned."
+        ),
         parameters=[
             OpenApiParameter(
                 name="campaign_id",
@@ -162,6 +200,20 @@ class TaskListByCampaignAPIView(APIView):
                 location=OpenApiParameter.QUERY,
                 required=True,
                 description="Salesforce Campaign ID (cmp_sf_id)",
+            ),
+            OpenApiParameter(
+                name='page',
+                type=int,
+                location=OpenApiParameter.QUERY,
+                description='Page number (if provided, enables pagination)',
+                required=False,
+            ),
+            OpenApiParameter(
+                name='page_size',
+                type=int,
+                location=OpenApiParameter.QUERY,
+                description='Page size (max 100, if provided, enables pagination)',
+                required=False,
             ),
         ],
         responses={200: TaskListSerializer},
@@ -185,8 +237,22 @@ class TaskListByCampaignAPIView(APIView):
             tsk_active=1,
         ).order_by("tsk_activity_date", "tsk_subject")
 
-        paginator = StandardPagination()
-        page = paginator.paginate_queryset(tasks_qs, request)
-        serializer = TaskListSerializer(page, many=True, context={"request": request})
-        return paginator.get_paginated_response(serializer.data)
+        # Check if pagination parameters are provided
+        page_param = request.query_params.get('page')
+        page_size_param = request.query_params.get('page_size')
+
+        # If either pagination parameter is provided, use pagination
+        if page_param is not None or page_size_param is not None:
+            paginator = StandardPagination()
+            page = paginator.paginate_queryset(tasks_qs, request)
+            serializer = TaskListSerializer(page, many=True, context={"request": request})
+            return paginator.get_paginated_response(serializer.data)
+        
+        # Otherwise, return all data without pagination
+        serializer = TaskListSerializer(tasks_qs, many=True, context={"request": request})
+        from core.api.responses import APIResponse
+        return APIResponse.success(
+            data=serializer.data,
+            message='Data retrieved successfully'
+        )
 
