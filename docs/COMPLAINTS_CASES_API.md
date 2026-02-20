@@ -21,6 +21,12 @@ Auth: `AllowAny` (no authentication required).
 
 **GET** `/api/complaints-cases/summary/`
 
+**Query params:**
+
+| Param | Type | Required | Description |
+|-------|------|----------|-------------|
+| `account_id` | string | Yes | Account Salesforce ID to scope summary counts |
+
 **Response (200):**
 ```json
 {
@@ -36,7 +42,7 @@ Auth: `AllowAny` (no authentication required).
 
 **Sample curl:**
 ```bash
-curl -s -X GET "http://localhost:8000/api/complaints-cases/summary/"
+curl -s -X GET "http://localhost:8000/api/complaints-cases/summary/?account_id=001xx000001234ABC"
 ```
 
 ---
@@ -245,6 +251,7 @@ curl -s -X GET "http://localhost:8000/api/complaints-cases/500xx000001234ABC/tim
 ## Error responses
 
 - **400** – Invalid query params (e.g. `status`, `ordering`, date format). Body includes `errors` or field-specific messages.
+- **422** – Missing required `account_id` in summary endpoint.
 - **404** – Case not found (detail, comments, timeline).
 - **500** – Server error (handled by project exception handler).
 
