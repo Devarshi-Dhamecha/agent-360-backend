@@ -9,8 +9,8 @@ Auth: `AllowAny` (no authentication required).
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| GET | `/api/complaints-cases/summary/` | Summary counts (open, closed, total) |
-| GET | `/api/complaints-cases/` | List cases with filters and pagination |
+| GET | `/api/complaints-cases/summary/` | Summary counts (open, closed, total) with optional date filters |
+| GET | `/api/complaints-cases/` | List cases with filters, pagination, and per-case comment/history counts |
 | GET | `/api/complaints-cases/{case_id}/` | Case detail with counts |
 | GET | `/api/complaints-cases/{case_id}/comments/` | Comments for case (latest first) |
 | GET | `/api/complaints-cases/{case_id}/timeline/` | Timeline (case history) for case (latest first) |
@@ -21,11 +21,15 @@ Auth: `AllowAny` (no authentication required).
 
 **GET** `/api/complaints-cases/summary/`
 
+Returns summary counts of cases (open, closed, total). Supports optional date filtering.
+
 **Query params:**
 
 | Param | Type | Required | Description |
 |-------|------|----------|-------------|
 | `account_id` | string | Yes | Account Salesforce ID to scope summary counts |
+| `opened_from` | date | No | Opened date from (YYYY-MM-DD) |
+| `opened_to` | date | No | Opened date to (YYYY-MM-DD) |
 
 **Response (200):**
 ```json
@@ -42,7 +46,11 @@ Auth: `AllowAny` (no authentication required).
 
 **Sample curl:**
 ```bash
+# Get summary for an account
 curl -s -X GET "http://localhost:8000/api/complaints-cases/summary/?account_id=001xx000001234ABC"
+
+# Get summary with date filter
+curl -s -X GET "http://localhost:8000/api/complaints-cases/summary/?account_id=001xx000001234ABC&opened_from=2024-01-01&opened_to=2024-12-31"
 ```
 
 ---
@@ -51,7 +59,7 @@ curl -s -X GET "http://localhost:8000/api/complaints-cases/summary/?account_id=0
 
 **GET** `/api/complaints-cases/`
 
-Returns cases with filters and ordering. If pagination parameters (`page` or `page_size`) are provided, returns paginated results. Otherwise, returns all cases without pagination.
+Returns cases with filters and ordering. Each case includes `comments_count` and `timeline_count` showing the number of comments and history events for that specific case. If pagination parameters (`page` or `page_size`) are provided, returns paginated results. Otherwise, returns all cases without pagination.
 
 **Query params:**
 
@@ -67,6 +75,24 @@ Returns cases with filters and ordering. If pagination parameters (`page` or `pa
 | `page_size` | int | - | Page size (max 100, if provided, enables pagination) |
 
 Invalid `status` or `ordering` returns **400** with validation errors.
+
+**Response Fields:**
+
+Each case object includes:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | string | Case Salesforce ID |
+| `case_number` | string | Case number |
+| `title` | string | Case subject/title |
+| `status` | string | Case status |
+| `opened_at` | date | Opened date (YYYY-MM-DD) |
+| `opened_at_display` | string | Opened date (DD/MM/YYYY) |
+| `comments_count` | int | Number of comments for this case |
+| `timeline_count` | int | Number of history events for this case |
+| `priority` | string | Case priority |
+| `account_id` | string | Account Salesforce ID |
+| `owner_id` | string | Owner Salesforce ID |
 
 **Response - All Data (200):**
 

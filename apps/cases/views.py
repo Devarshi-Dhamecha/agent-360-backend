@@ -58,10 +58,24 @@ def _cases_queryset_with_counts():
             description='Filter summary by account Salesforce ID',
             required=True,
         ),
+        OpenApiParameter(
+            name='opened_from',
+            type=str,
+            location=OpenApiParameter.QUERY,
+            description='Opened date from (YYYY-MM-DD)',
+            required=False,
+        ),
+        OpenApiParameter(
+            name='opened_to',
+            type=str,
+            location=OpenApiParameter.QUERY,
+            description='Opened date to (YYYY-MM-DD)',
+            required=False,
+        ),
     ],
 )
 class CaseSummaryAPIView(APIView):
-    """GET /api/complaints-cases/summary - open_count, total_count, closed_count."""
+    """GET /api/complaints-cases/summary - open_count, total_count, closed_count with optional date filters."""
     permission_classes = [AllowAny]
 
     def get(self, request):
@@ -69,12 +83,25 @@ class CaseSummaryAPIView(APIView):
         if not account_id:
             raise ValidationError({'account_id': ['This query parameter is required.']})
 
+        opened_from = request.query_params.get('opened_from') or ''
+        opened_to = request.query_params.get('opened_to') or ''
+
+        opened_from_d = _parse_date(opened_from, 'opened_from')
+        opened_to_d = _parse_date(opened_to, 'opened_to')
+
         qs = Case.objects.all()
         qs = qs.filter(cs_account_id_id=account_id)
+
+        # Apply date filters if provided
+        if opened_from_d:
+            qs = qs.filter(cs_sf_created_date__date__gte=opened_from_d)
+        if opened_to_d:
+            qs = qs.filter(cs_sf_created_date__date__lte=opened_to_d)
 
         total_count = qs.count()
         closed_count = qs.filter(cs_status__iexact='Closed').count()
         open_count = total_count - closed_count
+
         data = {
             'open_count': open_count,
             'total_count': total_count,
