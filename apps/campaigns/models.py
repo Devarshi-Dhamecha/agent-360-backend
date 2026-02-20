@@ -177,13 +177,16 @@ class Task(models.Model):
         db_column='tsk_sf_id',
         verbose_name='Salesforce ID'
     )
-    # Polymorphic relationship - can relate to various objects
-    tsk_what_id = models.CharField(
-        max_length=18,
+    # Link to Campaign via Salesforce ID (cmp_sf_id)
+    tsk_what_id = models.ForeignKey(
+        'Campaign',
+        to_field='cmp_sf_id',
         null=True,
         blank=True,
+        on_delete=models.SET_NULL,
         db_column='tsk_what_id',
-        verbose_name='What ID'
+        verbose_name='Campaign',
+        related_name='tasks',
     )
     tsk_what_type = models.CharField(
         max_length=40,
