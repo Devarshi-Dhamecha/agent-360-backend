@@ -49,13 +49,31 @@ def _cases_queryset_with_counts():
     )
 
 
+@extend_schema(
+    parameters=[
+        OpenApiParameter(
+            name='account_id',
+            type=str,
+            location=OpenApiParameter.QUERY,
+            description='Filter summary by account Salesforce ID',
+            required=True,
+        ),
+    ],
+)
 class CaseSummaryAPIView(APIView):
     """GET /api/complaints-cases/summary - open_count, total_count, closed_count."""
     permission_classes = [AllowAny]
 
     def get(self, request):
-        total_count = Case.objects.count()
-        closed_count = Case.objects.filter(cs_status__iexact='Closed').count()
+        account_id = (request.query_params.get('account_id') or '').strip()
+        if not account_id:
+            raise ValidationError({'account_id': ['This query parameter is required.']})
+
+        qs = Case.objects.all()
+        qs = qs.filter(cs_account_id_id=account_id)
+
+        total_count = qs.count()
+        closed_count = qs.filter(cs_status__iexact='Closed').count()
         open_count = total_count - closed_count
         data = {
             'open_count': open_count,

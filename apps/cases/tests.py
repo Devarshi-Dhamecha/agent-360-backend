@@ -64,13 +64,62 @@ class CaseSummaryAPITests(TestCase):
             cs_last_modified_date=_dt(2024, 1, 12),
             cs_last_modified_by_id='usr001',
         )
-        response = self.client.get('/api/complaints-cases/summary/')
+        response = self.client.get(
+            '/api/complaints-cases/summary/',
+            {'account_id': self.account.acc_sf_id},
+        )
         self.assertEqual(response.status_code, status.HTTP_200_OK)
         data = response.json()
         self.assertTrue(data.get('success'))
         self.assertEqual(data['data']['open_count'], 1)
         self.assertEqual(data['data']['closed_count'], 1)
         self.assertEqual(data['data']['total_count'], 2)
+
+    def test_summary_requires_account_id(self):
+        response = self.client.get('/api/complaints-cases/summary/')
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY)
+
+    def test_summary_counts_filtered_by_account_id(self):
+        other_account = Account.objects.create(
+            acc_sf_id='acc002',
+            acc_name='Other Account',
+            acc_owner_id=self.user,
+            acc_last_modified_date=_dt(2020, 1, 1),
+            acc_last_modified_by_id='usr001',
+        )
+        Case.objects.create(
+            cs_sf_id='case_acc_1',
+            cs_case_number='00001003',
+            cs_subject='Open case for account 1',
+            cs_status='Open',
+            cs_account_id=self.account,
+            cs_owner_id=self.user,
+            cs_sf_created_date=_dt(2024, 1, 15),
+            cs_last_modified_date=_dt(2024, 1, 15),
+            cs_last_modified_by_id='usr001',
+        )
+        Case.objects.create(
+            cs_sf_id='case_acc_2',
+            cs_case_number='00001004',
+            cs_subject='Closed case for account 2',
+            cs_status='Closed',
+            cs_account_id=other_account,
+            cs_owner_id=self.user,
+            cs_sf_created_date=_dt(2024, 1, 16),
+            cs_last_modified_date=_dt(2024, 1, 16),
+            cs_last_modified_by_id='usr001',
+        )
+
+        response = self.client.get(
+            '/api/complaints-cases/summary/',
+            {'account_id': self.account.acc_sf_id},
+        )
+        self.assertEqual(response.status_code, status.HTTP_200_OK)
+        data = response.json()
+        self.assertTrue(data.get('success'))
+        self.assertEqual(data['data']['open_count'], 1)
+        self.assertEqual(data['data']['closed_count'], 0)
+        self.assertEqual(data['data']['total_count'], 1)
 
 
 class CaseListAPITests(TestCase):
