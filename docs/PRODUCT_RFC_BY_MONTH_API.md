@@ -69,7 +69,7 @@ GET /api/products/rfc-by-month/?account_id=001XXX&product_ids=PRD-001,PRD-002
 
 - **Account:** `accounts.acc_sf_id` = `account_id` (scope for invoices and forecasts).
 - **Products:** `products.prd_sf_id` IN `product_ids`.
-- **Current year (RFC):** `arf_rolling_forecasts` – draft: `arf_draft_quantity`, `arf_draft_value`; approved: `arf_approved_quantity`, `arf_approved_value`. Key: `arf_account_id`, `arf_product_id`, `arf_forecast_date` (month).
+- **Current year (RFC):** `arf_rolling_forecasts` – draft: `arf_draft_quantity`, `arf_draft_value`; approved: `arf_approved_quantity`, `arf_approved_value`; **rejection reason:** `arf_rejection_reason` (one per product/month when present, e.g. MAX when multiple rows). Key: `arf_account_id`, `arf_product_id`, `arf_forecast_date` (month).
 - **Last year (LY):** `invoice_line_items` + `invoices` – `ili_quantity` (LY Qty), `ili_net_price` (LY Value). Same account and product; invoice date in **same calendar month range, previous year**.
 
 ### Last Year (LY) – Quantity and Value
@@ -194,6 +194,7 @@ Response includes **accountId**, **from**, **to**, **currencySymbol**, and **pro
 - **lyQty**, **lyValue** – last year (same window, previous year)
 - **draftRfcQty**, **draftRfcValue** – current year draft RFC
 - **approvedRfcQty**, **approvedRfcValue** – current year approved RFC
+- **rejectionReason** – optional; from `arf_rolling_forecasts.arf_rejection_reason` (one per product/month when present; null when none)
 
 Example (frontend uses `draftRfcQty`/`draftRfcValue` or `approvedRfcQty`/`approvedRfcValue` to show Draft vs Approved view):
 
@@ -219,7 +220,8 @@ Example (frontend uses `draftRfcQty`/`draftRfcValue` or `approvedRfcQty`/`approv
             "draftRfcQty": 250,
             "draftRfcValue": 225000.00,
             "approvedRfcQty": 240,
-            "approvedRfcValue": 216000.00
+            "approvedRfcValue": 216000.00,
+            "rejectionReason": null
           },
           {
             "month": "2026-03",
@@ -229,7 +231,8 @@ Example (frontend uses `draftRfcQty`/`draftRfcValue` or `approvedRfcQty`/`approv
             "draftRfcQty": 280,
             "draftRfcValue": 252000.00,
             "approvedRfcQty": 270,
-            "approvedRfcValue": 243000.00
+            "approvedRfcValue": 243000.00,
+            "rejectionReason": "Insufficient supporting market data"
           }
         ]
       }

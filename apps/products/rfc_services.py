@@ -148,7 +148,7 @@ def get_rfc_by_month(
             for row in cursor.fetchall()
         }
 
-    # Current year: arf_rolling_forecasts, draft and approved by product and month
+    # Current year: arf_rolling_forecasts, draft and approved by product and month; include rejection reason
     rfc_query = f"""
         SELECT
             arf.arf_product_id AS product_id,
@@ -156,7 +156,8 @@ def get_rfc_by_month(
             COALESCE(SUM(arf.arf_draft_quantity), 0) AS draft_qty,
             COALESCE(SUM(arf.arf_draft_value), 0) AS draft_value,
             COALESCE(SUM(arf.arf_approved_quantity), 0) AS approved_qty,
-            COALESCE(SUM(arf.arf_approved_value), 0) AS approved_value
+            COALESCE(SUM(arf.arf_approved_value), 0) AS approved_value,
+            MAX(arf.arf_rejection_reason) AS rejection_reason
         FROM arf_rolling_forecasts arf
         WHERE arf.arf_account_id = %s
           AND arf.arf_product_id IN ({placeholders})
@@ -175,6 +176,7 @@ def get_rfc_by_month(
                 "draftRfcValue": float(row[3]),
                 "approvedRfcQty": float(row[4]),
                 "approvedRfcValue": float(row[5]),
+                "rejectionReason": row[6] if row[6] else None,
             }
             for row in cursor.fetchall()
         }
@@ -194,6 +196,7 @@ def get_rfc_by_month(
                     "draftRfcValue": 0.0,
                     "approvedRfcQty": 0.0,
                     "approvedRfcValue": 0.0,
+                    "rejectionReason": None,
                 },
             )
             months_out.append({
@@ -205,6 +208,7 @@ def get_rfc_by_month(
                 "draftRfcValue": rfc["draftRfcValue"],
                 "approvedRfcQty": rfc["approvedRfcQty"],
                 "approvedRfcValue": rfc["approvedRfcValue"],
+                "rejectionReason": rfc.get("rejectionReason"),
             })
         products_out.append({
             "productId": product_id,

@@ -285,6 +285,7 @@ class RfcByMonthAPIView(APIView):
                                                 "draftRfcValue": 225000.0,
                                                 "approvedRfcQty": 240.0,
                                                 "approvedRfcValue": 216000.0,
+                                                "rejectionReason": None,
                                             },
                                         ],
                                     },
