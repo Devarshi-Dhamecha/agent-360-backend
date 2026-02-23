@@ -49,7 +49,8 @@ class SalesAnalyticsService:
     def get_product_family_analytics(
         account_id: str,
         from_date: str,
-        to_date: str
+        to_date: str,
+        search: str = None
     ) -> List[Dict]:
         """
         Get product family level analytics with actuals, last year, and RFC.
@@ -58,6 +59,7 @@ class SalesAnalyticsService:
             account_id: Salesforce Account ID
             from_date: Start date in YYYY-MM-DD format
             to_date: End date in YYYY-MM-DD format
+            search: Optional search term to filter family names
             
         Returns:
             List of product family analytics
@@ -141,6 +143,7 @@ class SalesAnalyticsService:
             rfc r ON COALESCE(a.family, ly.family) = r.family
         WHERE
             COALESCE(a.family, ly.family, r.family) IS NOT NULL
+            {search_filter}
         ORDER BY
             family
         """
@@ -150,6 +153,14 @@ class SalesAnalyticsService:
             account_id, ly_from_date, ly_to_date,
             account_id, from_date, to_date
         ]
+        
+        # Add search filter if provided
+        search_filter = ""
+        if search:
+            search_filter = "AND LOWER(COALESCE(a.family, ly.family, r.family)) LIKE %s"
+            params.append(f"%{search.lower()}%")
+        
+        query = query.format(search_filter=search_filter)
         
         with connection.cursor() as cursor:
             cursor.execute(query, params)
@@ -173,7 +184,9 @@ class SalesAnalyticsService:
         account_id: str,
         family: str,
         from_date: str,
-        to_date: str
+        to_date: str,
+        search: str = None,
+        top_x: int = None
     ) -> List[Dict]:
         """
         Get product level analytics for a specific family.
@@ -183,6 +196,8 @@ class SalesAnalyticsService:
             family: Product family name
             from_date: Start date in YYYY-MM-DD format
             to_date: End date in YYYY-MM-DD format
+            search: Optional search term to filter product names
+            top_x: Optional filter for top X products (5, 10, 20, 30)
             
         Returns:
             List of product analytics
@@ -275,8 +290,9 @@ class SalesAnalyticsService:
             products p ON COALESCE(a.product_id, ly.product_id, r.product_id) = p.prd_sf_id
         WHERE
             COALESCE(a.product_id, ly.product_id, r.product_id) IS NOT NULL
+            {search_filter}
         ORDER BY
-            product_name
+            actual_sales DESC
         """
         
         params = [
@@ -285,12 +301,21 @@ class SalesAnalyticsService:
             account_id, family, from_date, to_date
         ]
         
+        # Add search filter if provided
+        search_filter = ""
+        if search:
+            search_filter = "AND LOWER(COALESCE(a.product_name, p.prd_name)) LIKE %s"
+            params.append(f"%{search.lower()}%")
+        
+        query = query.format(search_filter=search_filter)
+        
         with connection.cursor() as cursor:
             cursor.execute(query, params)
             columns = [col[0] for col in cursor.description]
             results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         
-        return [
+        # Convert to list of dictionaries
+        product_list = [
             {
                 'productId': row['product_id'],
                 'productName': row['product_name'] or 'Unknown',
@@ -302,13 +327,28 @@ class SalesAnalyticsService:
             }
             for row in results
         ]
+        
+        # Apply TopX filter if provided
+        if top_x:
+            # Define ranges: 5→1-5, 10→1-10, 20→11-20, 30→21-30
+            if top_x == 5:
+                product_list = product_list[0:5]
+            elif top_x == 10:
+                product_list = product_list[0:10]
+            elif top_x == 20:
+                product_list = product_list[10:20]
+            elif top_x == 30:
+                product_list = product_list[20:30]
+        
+        return product_list
     
     @staticmethod
     def get_order_contribution(
         account_id: str,
         product_id: str,
         from_date: str,
-        to_date: str
+        to_date: str,
+        search: str = None
     ) -> List[Dict]:
         """
         Get order contribution for a specific product.
@@ -318,6 +358,7 @@ class SalesAnalyticsService:
             product_id: Product Salesforce ID
             from_date: Start date in YYYY-MM-DD format
             to_date: End date in YYYY-MM-DD format
+            search: Optional search term to filter order numbers
             
         Returns:
             List of order contributions
@@ -343,11 +384,20 @@ class SalesAnalyticsService:
             AND ori.ori_active = 1
         GROUP BY
             ori.ori_order_id, ord.ord_order_number, ord.ord_status
+        {search_filter}
         ORDER BY
             ord.ord_order_number
         """
         
         params = [account_id, product_id, from_date, to_date]
+        
+        # Add search filter if provided
+        search_filter = ""
+        if search:
+            search_filter = "HAVING LOWER(ord.ord_order_number) LIKE %s"
+            params.append(f"%{search.lower()}%")
+        
+        query = query.format(search_filter=search_filter)
         
         with connection.cursor() as cursor:
             cursor.execute(query, params)
@@ -372,7 +422,8 @@ class SalesAnalyticsService:
         account_id: str,
         order_id: str,
         from_date: str,
-        to_date: str
+        to_date: str,
+        search: str = None
     ) -> List[Dict]:
         """
         Get all product details for a specific order.
@@ -382,6 +433,7 @@ class SalesAnalyticsService:
             order_id: Order Salesforce ID
             from_date: Start date in YYYY-MM-DD format
             to_date: End date in YYYY-MM-DD format
+            search: Optional search term to filter product names
             
         Returns:
             List of order line item details
@@ -410,11 +462,20 @@ class SalesAnalyticsService:
             AND prd.prd_active = 1
         GROUP BY
             ori.ori_product_id, prd.prd_name, ori.ori_status
+        {search_filter}
         ORDER BY
             prd.prd_name
         """
         
         params = [account_id, order_id, from_date, to_date]
+        
+        # Add search filter if provided
+        search_filter = ""
+        if search:
+            search_filter = "HAVING LOWER(prd.prd_name) LIKE %s"
+            params.append(f"%{search.lower()}%")
+        
+        query = query.format(search_filter=search_filter)
         
         with connection.cursor() as cursor:
             cursor.execute(query, params)

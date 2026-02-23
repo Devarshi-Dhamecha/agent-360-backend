@@ -82,6 +82,13 @@ class ProductFamilyAnalyticsAPIView(APIView):
                 required=False,
                 description="Items per page (default: 20, max: 100)",
             ),
+            OpenApiParameter(
+                name="search",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Search term to filter family names",
+            ),
         ],
         responses={200: ProductFamilySerializer(many=True)},
     )
@@ -89,6 +96,7 @@ class ProductFamilyAnalyticsAPIView(APIView):
         account_id = (request.query_params.get("accountId") or "").strip()
         from_month = (request.query_params.get("from") or "").strip()
         to_month = (request.query_params.get("to") or "").strip()
+        search = (request.query_params.get("search") or "").strip() or None
         
         # Pagination parameters
         try:
@@ -144,7 +152,7 @@ class ProductFamilyAnalyticsAPIView(APIView):
             
             # Get analytics data
             analytics_data = SalesAnalyticsService.get_product_family_analytics(
-                account_id, from_date, to_date
+                account_id, from_date, to_date, search
             )
             
             # Paginate results
@@ -257,6 +265,24 @@ class ProductAnalyticsAPIView(APIView):
         family = (request.query_params.get("family") or "").strip()
         from_month = (request.query_params.get("from") or "").strip()
         to_month = (request.query_params.get("to") or "").strip()
+        search = (request.query_params.get("search") or "").strip() or None
+        
+        # TopX parameter
+        top_x = None
+        top_x_param = request.query_params.get("topX")
+        if top_x_param:
+            try:
+                top_x = int(top_x_param)
+                if top_x not in [5, 10, 20, 30]:
+                    return ErrorResponse.validation_error(
+                        message="Invalid topX parameter",
+                        errors=[{"field": "topX", "message": "topX must be one of: 5, 10, 20, 30"}]
+                    )
+            except ValueError:
+                return ErrorResponse.validation_error(
+                    message="Invalid topX parameter",
+                    errors=[{"field": "topX", "message": "topX must be a valid integer"}]
+                )
         
         # Pagination parameters
         try:
@@ -318,7 +344,7 @@ class ProductAnalyticsAPIView(APIView):
             
             # Get analytics data
             analytics_data = SalesAnalyticsService.get_product_analytics(
-                account_id, family, from_date, to_date
+                account_id, family, from_date, to_date, search, top_x
             )
             
             # Paginate results
@@ -419,6 +445,13 @@ class OrderContributionAPIView(APIView):
                 required=False,
                 description="Items per page (default: 20, max: 100)",
             ),
+            OpenApiParameter(
+                name="search",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Search term to filter order numbers",
+            ),
         ],
         responses={200: OrderContributionSerializer(many=True)},
     )
@@ -427,6 +460,7 @@ class OrderContributionAPIView(APIView):
         product_id = (request.query_params.get("productId") or "").strip()
         from_month = (request.query_params.get("from") or "").strip()
         to_month = (request.query_params.get("to") or "").strip()
+        search = (request.query_params.get("search") or "").strip() or None
         
         # Pagination parameters
         try:
@@ -488,7 +522,7 @@ class OrderContributionAPIView(APIView):
             
             # Get order contribution data
             contribution_data = SalesAnalyticsService.get_order_contribution(
-                account_id, product_id, from_date, to_date
+                account_id, product_id, from_date, to_date, search
             )
             
             # Paginate results
@@ -588,6 +622,13 @@ class OrderDetailsAPIView(APIView):
                 required=False,
                 description="Items per page (default: 20, max: 100)",
             ),
+            OpenApiParameter(
+                name="search",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Search term to filter product names",
+            ),
         ],
         responses={200: OrderDetailsSerializer(many=True)},
     )
@@ -596,6 +637,7 @@ class OrderDetailsAPIView(APIView):
         order_id = (request.query_params.get("orderId") or "").strip()
         from_month = (request.query_params.get("from") or "").strip()
         to_month = (request.query_params.get("to") or "").strip()
+        search = (request.query_params.get("search") or "").strip() or None
         
         # Pagination parameters
         try:
@@ -657,7 +699,7 @@ class OrderDetailsAPIView(APIView):
             
             # Get order details data
             details_data = SalesAnalyticsService.get_order_details(
-                account_id, order_id, from_date, to_date
+                account_id, order_id, from_date, to_date, search
             )
             
             # Paginate results

@@ -133,14 +133,6 @@ deviationPercent = IF forecastRevenue = 0 THEN 0 ELSE (deviation / forecastReven
         "forecastRevenue": 70000.00,
         "deviation": -30000.00,
         "deviationPercent": -42.86
-      },
-      {
-        "productId": "PRD-012",
-        "productName": "Product L",
-        "actualRevenue": 50000.00,
-        "forecastRevenue": 75000.00,
-        "deviation": -25000.00,
-        "deviationPercent": -33.33
       }
     ]
   }
@@ -220,7 +212,7 @@ Repository Layer (repositories.py)
    - Call repository methods
    - Calculate deviation and deviation percentage
    - Sort and rank products
-   - Select top 3 and bottom 3 performers
+   - Select top 3 and bottom 2 performers
 
 3. **Controller Layer**
    - Validate query parameters
@@ -294,7 +286,7 @@ ON invoice_line_items(ili_valid);
 4. **Query Optimization**
    - Use appropriate indexes
    - Filter early in query execution
-   - Limit results to top/bottom 3
+   - Limit results to top 3 and bottom 2
 
 ## Implementation Checklist
 

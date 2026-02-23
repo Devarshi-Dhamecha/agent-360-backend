@@ -79,7 +79,7 @@ class ProductPerformanceService:
             account_id: Optional Salesforce Account ID to filter by
             
         Returns:
-            Dictionary with topPerformers and bottomPerformers lists
+            Dictionary with topPerformers (top 3) and bottomPerformers (bottom 2) lists
         """
         # Build query with optional account filter
         account_filter_actual = "AND inv.inv_account_id = %s" if account_id else ""
@@ -167,8 +167,8 @@ class ProductPerformanceService:
         # Get top 3 performers (highest deviation)
         top_performers = results[:3]
         
-        # Get bottom 3 performers (lowest deviation)
-        bottom_performers = sorted(results, key=lambda x: x['deviation'])[:3]
+        # Get bottom 2 performers (lowest deviation)
+        bottom_performers = sorted(results, key=lambda x: x['deviation'])[:2]
         
         # Format response
         def format_product(product: Dict) -> Dict:

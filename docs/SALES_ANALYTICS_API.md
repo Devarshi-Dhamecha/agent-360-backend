@@ -21,6 +21,26 @@ All endpoints require:
 - `from`: Start month in YYYY-MM format
 - `to`: End month in YYYY-MM format
 
+### Optional Filters
+
+#### Search (All Levels)
+All endpoints support a `search` parameter for filtering results:
+- Level 1 (Family): Filters by family name
+- Level 2 (Product): Filters by product name
+- Level 3 (Orders): Filters by order number
+- Level 4 (Order Details): Filters by product name
+
+Search is case-insensitive and uses partial matching.
+
+#### TopX Filter (Product Level Only)
+The product level endpoint supports a `topX` parameter to filter top-performing products by actual sales:
+- `topX=5`: Returns products ranked 1-5
+- `topX=10`: Returns products ranked 1-10
+- `topX=20`: Returns products ranked 11-20
+- `topX=30`: Returns products ranked 21-30
+
+Products are ordered by `actualSales` in descending order before applying the TopX filter.
+
 ### Date Conversion
 
 The system automatically converts month ranges:
@@ -78,6 +98,7 @@ Provides aggregated sales analytics at the product family level, comparing actua
 | to | string | Yes | End month (YYYY-MM) |
 | page | integer | No | Page number (default: 1) |
 | page_size | integer | No | Items per page (default: 20, max: 100) |
+| search | string | No | Search term to filter family names (case-insensitive) |
 
 ### Response Fields
 
@@ -132,7 +153,11 @@ GROUP BY prd.prd_family
 ### Example Request
 
 ```bash
+# Basic request
 GET /api/sales/family?accountId=0011234567890ABC&from=2025-01&to=2025-12&page=1&page_size=20
+
+# With search filter
+GET /api/sales/family?accountId=0011234567890ABC&from=2025-01&to=2025-12&search=electronics
 ```
 
 ### Example Response
@@ -196,6 +221,8 @@ Provides detailed sales analytics for individual products within a specific prod
 | to | string | Yes | End month (YYYY-MM) |
 | page | integer | No | Page number (default: 1) |
 | page_size | integer | No | Items per page (default: 20, max: 100) |
+| search | string | No | Search term to filter product names (case-insensitive) |
+| topX | integer | No | Filter for top X products: 5 (1-5), 10 (1-10), 20 (11-20), 30 (21-30) |
 
 ### Response Fields
 
@@ -219,7 +246,17 @@ Same as Level 1, but:
 ### Example Request
 
 ```bash
+# Basic request
 GET /api/sales/product?accountId=0011234567890ABC&family=Electronics&from=2025-01&to=2025-12&page=1&page_size=20
+
+# With search filter
+GET /api/sales/product?accountId=0011234567890ABC&family=Electronics&from=2025-01&to=2025-12&search=laptop
+
+# With TopX filter (top 5 products)
+GET /api/sales/product?accountId=0011234567890ABC&family=Electronics&from=2025-01&to=2025-12&topX=5
+
+# With both search and TopX
+GET /api/sales/product?accountId=0011234567890ABC&family=Electronics&from=2025-01&to=2025-12&search=pro&topX=10
 ```
 
 ### Example Response
@@ -285,6 +322,7 @@ Shows how a specific product contributed to each order. Only displays the select
 | to | string | Yes | End month (YYYY-MM) |
 | page | integer | No | Page number (default: 1) |
 | page_size | integer | No | Items per page (default: 20, max: 100) |
+| search | string | No | Search term to filter order numbers (case-insensitive) |
 
 ### Response Fields
 
@@ -323,7 +361,11 @@ GROUP BY ori.ori_order_id, ord.ord_order_number, ord.ord_status
 ### Example Request
 
 ```bash
+# Basic request
 GET /api/sales/orders?accountId=0011234567890ABC&productId=01t1234567890ABC&from=2025-01&to=2025-12&page=1&page_size=20
+
+# With search filter
+GET /api/sales/orders?accountId=0011234567890ABC&productId=01t1234567890ABC&from=2025-01&to=2025-12&search=ORD-2025
 ```
 
 ### Example Response
@@ -389,6 +431,7 @@ Shows ALL products inside a specific order with their quantities and amounts.
 | to | string | Yes | End month (YYYY-MM) |
 | page | integer | No | Page number (default: 1) |
 | page_size | integer | No | Items per page (default: 20, max: 100) |
+| search | string | No | Search term to filter product names (case-insensitive) |
 
 ### Response Fields
 
@@ -429,7 +472,11 @@ GROUP BY ori.ori_product_id, prd.prd_name, ori.ori_status
 ### Example Request
 
 ```bash
+# Basic request
 GET /api/sales/order-details?accountId=0011234567890ABC&orderId=8011234567890ABC&from=2025-01&to=2025-12&page=1&page_size=20
+
+# With search filter
+GET /api/sales/order-details?accountId=0011234567890ABC&orderId=8011234567890ABC&from=2025-01&to=2025-12&search=laptop
 ```
 
 ### Example Response
@@ -605,10 +652,28 @@ params = {
 response = requests.get(f"{base_url}/family", params=params)
 families = response.json()
 
+# Level 1 with search
+params["search"] = "electronics"
+response = requests.get(f"{base_url}/family", params=params)
+families = response.json()
+del params["search"]
+
 # Level 2: Products in a family
 params["family"] = "Electronics"
 response = requests.get(f"{base_url}/product", params=params)
 products = response.json()
+
+# Level 2 with TopX filter (top 5 products)
+params["topX"] = 5
+response = requests.get(f"{base_url}/product", params=params)
+top_products = response.json()
+del params["topX"]
+
+# Level 2 with search
+params["search"] = "laptop"
+response = requests.get(f"{base_url}/product", params=params)
+products = response.json()
+del params["search"]
 
 # Level 3: Order contribution for a product
 params["productId"] = "01t1234567890ABC"
@@ -616,9 +681,20 @@ del params["family"]
 response = requests.get(f"{base_url}/orders", params=params)
 orders = response.json()
 
+# Level 3 with search
+params["search"] = "ORD-2025"
+response = requests.get(f"{base_url}/orders", params=params)
+orders = response.json()
+del params["search"]
+
 # Level 4: Order details
 params["orderId"] = "8011234567890ABC"
 del params["productId"]
+response = requests.get(f"{base_url}/order-details", params=params)
+details = response.json()
+
+# Level 4 with search
+params["search"] = "mouse"
 response = requests.get(f"{base_url}/order-details", params=params)
 details = response.json()
 ```
@@ -629,14 +705,29 @@ details = response.json()
 # Level 1: Product Family
 curl -X GET "http://localhost:8000/api/sales/family?accountId=0011234567890ABC&from=2025-01&to=2025-12&page=1&page_size=20"
 
+# Level 1 with search
+curl -X GET "http://localhost:8000/api/sales/family?accountId=0011234567890ABC&from=2025-01&to=2025-12&search=electronics"
+
 # Level 2: Products
 curl -X GET "http://localhost:8000/api/sales/product?accountId=0011234567890ABC&family=Electronics&from=2025-01&to=2025-12&page=1&page_size=20"
+
+# Level 2 with TopX filter (top 5)
+curl -X GET "http://localhost:8000/api/sales/product?accountId=0011234567890ABC&family=Electronics&from=2025-01&to=2025-12&topX=5"
+
+# Level 2 with search
+curl -X GET "http://localhost:8000/api/sales/product?accountId=0011234567890ABC&family=Electronics&from=2025-01&to=2025-12&search=laptop"
 
 # Level 3: Order Contribution
 curl -X GET "http://localhost:8000/api/sales/orders?accountId=0011234567890ABC&productId=01t1234567890ABC&from=2025-01&to=2025-12&page=1&page_size=20"
 
+# Level 3 with search
+curl -X GET "http://localhost:8000/api/sales/orders?accountId=0011234567890ABC&productId=01t1234567890ABC&from=2025-01&to=2025-12&search=ORD-2025"
+
 # Level 4: Order Details
 curl -X GET "http://localhost:8000/api/sales/order-details?accountId=0011234567890ABC&orderId=8011234567890ABC&from=2025-01&to=2025-12&page=1&page_size=20"
+
+# Level 4 with search
+curl -X GET "http://localhost:8000/api/sales/order-details?accountId=0011234567890ABC&orderId=8011234567890ABC&from=2025-01&to=2025-12&search=laptop"
 ```
 
 ---
