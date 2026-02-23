@@ -17,7 +17,10 @@ from .serializers import (
     ProductPerformanceResponseSerializer,
     QuarterlyPerformanceResponseSerializer,
     RfcByMonthResponseSerializer,
+    UpdateRfcRequestSerializer,
+    UpdateRfcResponseSerializer,
 )
+from .models import Product
 from .services import ProductPerformanceService, get_quarterly_performance
 from . import rfc_services
 
@@ -379,3 +382,159 @@ class RfcByMonthAPIView(APIView):
             data=data,
             message="RFC by month retrieved successfully",
         )
+
+
+class UpdateRfcAPIView(APIView):
+    """
+    PATCH /api/products/update-rfc/
+
+    Update draft RFC quantity per product/month. User sends only draftRfcQty;
+    backend calculates draft value (qty × unit price from existing row). Only future months.
+    """
+
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Products"],
+        summary="Update RFC (draft quantity)",
+        description=(
+            "Updates draft RFC quantity in arf_rolling_forecasts. Request body: accountId and updates[] "
+            "with productId, month (YYYY-MM), draftRfcQty. Only future months can be edited. "
+            "Backend calculates draft value from existing unit price. Returns updatedCount, updated, and notUpdated."
+        ),
+        request=UpdateRfcRequestSerializer,
+        responses={
+            200: OpenApiResponse(
+                response=UpdateRfcResponseSerializer,
+                description="RFC updated. Data includes updatedCount, updated[], notUpdated[].",
+                examples=[
+                    OpenApiExample(
+                        "Success",
+                        value={
+                            "success": True,
+                            "message": "RFC updated successfully",
+                            "data": {
+                                "accountId": "0011234567890ABC",
+                                "updatedCount": 3,
+                                "updated": [
+                                    {"productId": "PRD-001", "month": "2026-03"},
+                                    {"productId": "PRD-001", "month": "2026-04"},
+                                    {"productId": "PRD-002", "month": "2026-03"},
+                                ],
+                                "notUpdated": [],
+                            },
+                        },
+                        response_only=True,
+                        status_codes=["200"],
+                    ),
+                ],
+            ),
+            400: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Bad request (invalid JSON or body).",
+            ),
+            422: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Validation error (missing accountId/updates, invalid month, past month, etc.).",
+                examples=[
+                    OpenApiExample(
+                        "Missing accountId",
+                        value={
+                            "success": False,
+                            "message": "Validation failed",
+                            "errors": [{"field": "accountId", "message": "accountId is required"}],
+                        },
+                        response_only=True,
+                        status_codes=["422"],
+                    ),
+                    OpenApiExample(
+                        "Past month",
+                        value={
+                            "success": False,
+                            "message": "Validation failed",
+                            "errors": [
+                                {
+                                    "field": "updates[0].month",
+                                    "message": "Only future months can be edited",
+                                }
+                            ],
+                        },
+                        response_only=True,
+                        status_codes=["422"],
+                    ),
+                ],
+            ),
+            404: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Account or product not found.",
+            ),
+        },
+    )
+    def patch(self, request):
+        if not request.data or not isinstance(request.data, dict):
+            return ErrorResponse.bad_request(
+                message="Invalid request body",
+                errors=[{"field": "body", "message": "JSON body with accountId and updates is required"}],
+            )
+
+        account_id = (request.data.get("accountId") or "").strip()
+        updates_raw = request.data.get("updates")
+
+        if not account_id:
+            return ErrorResponse.validation_error(
+                message="Validation failed",
+                errors=[{"field": "accountId", "message": "accountId is required"}],
+            )
+        if not isinstance(updates_raw, list) or len(updates_raw) == 0:
+            return ErrorResponse.validation_error(
+                message="Validation failed",
+                errors=[{"field": "updates", "message": "updates must be a non-empty array"}],
+            )
+
+        MAX_UPDATES = 100
+        if len(updates_raw) > MAX_UPDATES:
+            return ErrorResponse.validation_error(
+                message="Validation failed",
+                errors=[{"field": "updates", "message": f"At most {MAX_UPDATES} items allowed per request"}],
+            )
+
+        seen = set()
+        for i, item in enumerate(updates_raw):
+            if not isinstance(item, dict):
+                return ErrorResponse.validation_error(
+                    message="Validation failed",
+                    errors=[{"field": f"updates[{i}]", "message": "Each item must have productId, month, draftRfcQty"}],
+                )
+            pid = (item.get("productId") or "").strip()
+            mon = (item.get("month") or "").strip()
+            key = (pid, mon)
+            if key in seen:
+                return ErrorResponse.validation_error(
+                    message="Validation failed",
+                    errors=[{"field": "updates", "message": "Duplicate productId and month in updates"}],
+                )
+            seen.add(key)
+
+        from apps.accounts.models import Account
+
+        if not Account.objects.filter(acc_sf_id=account_id).exists():
+            return ErrorResponse.not_found(
+                message="Account not found",
+                resource_type="Account",
+            )
+
+        product_ids = list({(item.get("productId") or "").strip() for item in updates_raw if isinstance(item, dict)})
+        product_ids = [p for p in product_ids if p]
+        existing_products = set(
+            Product.objects.filter(prd_sf_id__in=product_ids).values_list("prd_sf_id", flat=True)
+        )
+        missing = set(product_ids) - existing_products
+        if missing:
+            return ErrorResponse.validation_error(
+                message="Validation failed",
+                errors=[{"field": "productId", "message": f"Product(s) not found: {', '.join(sorted(missing))}"}],
+            )
+
+        modified_by = request.user if getattr(request.user, "is_authenticated", False) else None
+        data = rfc_services.update_rfc(account_id=account_id, updates=updates_raw, modified_by_user=modified_by)
+        return APIResponse.success(data=data, message="RFC updated successfully")

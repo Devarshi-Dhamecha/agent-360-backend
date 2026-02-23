@@ -24,6 +24,11 @@ urlpatterns = [
         views.RfcByMonthAPIView.as_view(),
         name="rfc_by_month",
     ),
+    path(
+        "update-rfc/",
+        views.UpdateRfcAPIView.as_view(),
+        name="update_rfc",
+    ),
 ]
 
 # Sales Analytics URLs

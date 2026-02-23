@@ -2,17 +2,23 @@
 RFC by Month Service Layer.
 
 Returns Draft and Approved RFC data plus Last Year (LY) qty/value per product per month.
+Update RFC: updates draft quantity (and backend-calculated draft value) in arf_rolling_forecasts.
 """
 from calendar import monthrange
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from django.db import connection
+from django.utils import timezone
 
-from apps.products.models import Product
+from apps.accounts.models import Account
+from apps.products.models import ArfRollingForecast, Product
 
 from .services import _currency_symbol_for_account
+
+# Statuses that allow draft updates (not Approved or Frozen)
+ARF_EDITABLE_STATUSES = ("Draft", "Pending_Approval", "Fixes_Needed")
 
 
 def _parse_dates(from_month: str, to_month: str) -> Tuple[date, date]:
@@ -222,4 +228,151 @@ def get_rfc_by_month(
         "to": f"{to_date.year}-{to_date.month:02d}",
         "currencySymbol": _currency_symbol_for_account(account_id),
         "products": products_out,
+    }
+
+
+def _parse_month_to_date(month_str: str) -> date:
+    """Parse YYYY-MM to first day of month."""
+    year, month = map(int, month_str.split("-"))
+    return date(year, month, 1)
+
+
+def _is_future_month(month_str: str) -> bool:
+    """True if the first day of month_str is strictly after today."""
+    try:
+        d = _parse_month_to_date(month_str)
+        return d > date.today()
+    except (ValueError, IndexError):
+        return False
+
+
+def update_rfc(
+    account_id: str,
+    updates: List[Dict[str, Any]],
+    modified_by_user: Optional[Any] = None,
+) -> Dict[str, Any]:
+    """
+    Update draft RFC quantity (and backend-calculated draft value) in arf_rolling_forecasts.
+
+    - User sends only draftRfcQty per (productId, month).
+    - Backend sets arf_draft_quantity; computes arf_draft_value = qty × unit_price
+      (unit price from existing row: arf_draft_unit_price else arf_approved_unit_price; else null).
+    - Only rows with status in Draft, Pending_Approval, Fixes_Needed and arf_active=1 are updated.
+    - Returns updatedCount, updated list, and notUpdated list with reasons.
+    """
+    updated: List[Dict[str, str]] = []
+    not_updated: List[Dict[str, Any]] = []
+    modified_at = timezone.now()
+    modified_by_id = None
+    if modified_by_user is not None and getattr(modified_by_user, "usr_sf_id", None):
+        modified_by_id = str(modified_by_user.usr_sf_id)
+
+    for item in updates:
+        product_id = (item.get("productId") or "").strip()
+        month_str = (item.get("month") or "").strip()
+        draft_qty = item.get("draftRfcQty")
+
+        if not product_id or not month_str:
+            not_updated.append({
+                "productId": product_id or "(missing)",
+                "month": month_str or "(missing)",
+                "reason": "productId and month are required",
+            })
+            continue
+
+        if draft_qty is None:
+            not_updated.append({
+                "productId": product_id,
+                "month": month_str,
+                "reason": "draftRfcQty is required",
+            })
+            continue
+
+        try:
+            qty_decimal = Decimal(str(draft_qty))
+            if qty_decimal < 0:
+                not_updated.append({
+                    "productId": product_id,
+                    "month": month_str,
+                    "reason": "draftRfcQty must be non-negative",
+                })
+                continue
+        except (ValueError, TypeError):
+            not_updated.append({
+                "productId": product_id,
+                "month": month_str,
+                "reason": "draftRfcQty must be a valid number",
+            })
+            continue
+
+        try:
+            forecast_date = _parse_month_to_date(month_str)
+        except (ValueError, IndexError):
+            not_updated.append({
+                "productId": product_id,
+                "month": month_str,
+                "reason": "month must be YYYY-MM",
+            })
+            continue
+
+        if not _is_future_month(month_str):
+            not_updated.append({
+                "productId": product_id,
+                "month": month_str,
+                "reason": "Only future months can be edited",
+            })
+            continue
+
+        row = (
+            ArfRollingForecast.objects.filter(
+                arf_account_id=account_id,
+                arf_product_id=product_id,
+                arf_forecast_date__year=forecast_date.year,
+                arf_forecast_date__month=forecast_date.month,
+                arf_status__in=ARF_EDITABLE_STATUSES,
+                arf_active=1,
+            )
+            .order_by("arf_forecast_date")
+            .first()
+        )
+
+        if not row:
+            not_updated.append({
+                "productId": product_id,
+                "month": month_str,
+                "reason": "No editable forecast row found for this product and month",
+            })
+            continue
+
+        unit_price = None
+        if row.arf_draft_unit_price is not None:
+            unit_price = row.arf_draft_unit_price
+        elif row.arf_approved_unit_price is not None:
+            unit_price = row.arf_approved_unit_price
+
+        draft_value = None
+        if unit_price is not None:
+            draft_value = (qty_decimal * unit_price).quantize(Decimal("0.01"))
+
+        row.arf_draft_quantity = qty_decimal
+        row.arf_draft_value = draft_value
+        row.arf_agent_modified_by_id = modified_by_id
+        row.arf_agent_modified_date = modified_at
+        row.arf_last_modified_by_id = modified_by_id or row.arf_last_modified_by_id or ""
+        row.save(update_fields=[
+            "arf_draft_quantity",
+            "arf_draft_value",
+            "arf_agent_modified_by_id",
+            "arf_agent_modified_date",
+            "arf_last_modified_by_id",
+            "arf_updated_at",
+        ])
+
+        updated.append({"productId": product_id, "month": month_str})
+
+    return {
+        "accountId": account_id,
+        "updatedCount": len(updated),
+        "updated": updated,
+        "notUpdated": not_updated,
     }
