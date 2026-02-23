@@ -90,7 +90,7 @@ deviationPercent =
 Query Params:
 
 ```
-GET /api/products/performance?from=YYYY-MM&to=YYYY-MM
+GET /api/products/performance/deviation/?account_id=XXX&from=YYYY-MM&to=YYYY-MM
 ```
 
 Convert internally to:

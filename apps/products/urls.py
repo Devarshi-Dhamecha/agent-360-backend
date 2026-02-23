@@ -10,9 +10,14 @@ app_name = "products"
 
 urlpatterns = [
     path(
-        "performance/",
-        views.ProductPerformanceAPIView.as_view(),
-        name="performance",
+        "performance/achieved/",
+        views.QuarterlyPerformanceAPIView.as_view(),
+        name="performance_achieved",
+    ),
+    path(
+        "performance/deviation/",
+        views.ProductDeviationPerformanceAPIView.as_view(),
+        name="performance_deviation",
     ),
 ]
 

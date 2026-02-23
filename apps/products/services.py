@@ -1,12 +1,35 @@
 """
 Product Performance Service Layer.
 """
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Any, Optional
 from calendar import monthrange
 
 from django.db import connection
+from django.db.models import Sum, Q
+from apps.accounts.models import Account, FrameAgreement, Target
+from apps.products.models import Invoice
+
+# ISO 4217 currency code → symbol for display (extend as needed)
+CURRENCY_SYMBOLS = {
+    'GBP': '£',
+    'EUR': '€',
+    'USD': '$',
+    'CHF': 'CHF',
+    'JPY': '¥',
+    'INR': '₹',
+}
+
+
+def _currency_symbol_for_account(account_id: str) -> str:
+    """Resolve display currency symbol from account's acc_currency_iso_code. Defaults to £ (GBP)."""
+    try:
+        acc = Account.objects.only('acc_currency_iso_code').get(acc_sf_id=account_id)
+        code = (acc.acc_currency_iso_code or '').strip().upper()
+        return CURRENCY_SYMBOLS.get(code, code or '£')  # use code if unknown, else £
+    except Account.DoesNotExist:
+        return '£'
 
 
 class ProductPerformanceService:
@@ -162,3 +185,183 @@ class ProductPerformanceService:
             'topPerformers': [format_product(p) for p in top_performers],
             'bottomPerformers': [format_product(p) for p in bottom_performers],
         }
+
+
+# -----------------------------------------------------------------------------
+# Quarter boundaries for a given year (inclusive start/end dates)
+# -----------------------------------------------------------------------------
+QUARTER_RANGES = [
+    (1, 3),   # Q1: Jan-Mar
+    (4, 6),   # Q2: Apr-Jun
+    (7, 9),   # Q3: Jul-Sep
+    (10, 12), # Q4: Oct-Dec
+]
+
+
+def _quarter_start_end(year: int, q: int) -> Tuple[date, date]:
+    """Return (start_date, end_date) for quarter 1-4 in given year."""
+    start_month = (q - 1) * 3 + 1
+    end_month = start_month + 2
+    start = date(year, start_month, 1)
+    last_day = monthrange(year, end_month)[1]
+    end = date(year, end_month, last_day)
+    return start, end
+
+
+def _invoice_sum(
+    account_id: str,
+    start_date: date,
+    end_date: date,
+) -> Decimal:
+    """Sum inv_net_price for account in date range; closed, valid, exclude credit notes."""
+    qs = Invoice.objects.filter(
+        inv_account_id=account_id,
+        inv_invoice_date__gte=start_date,
+        inv_invoice_date__lte=end_date,
+        inv_status='Closed',
+        inv_valid=True,
+    ).exclude(
+        inv_invoice_type='Credit Note'
+    ).aggregate(total=Sum('inv_net_price'))
+    total = qs.get('total')
+    return total if total is not None else Decimal('0')
+
+
+def _period_achieved(
+    actual: Decimal,
+    target: Decimal,
+    currency_symbol: str = '£',
+) -> Dict[str, Any]:
+    """Build achieved block: target, actual, difference, percent, label."""
+    target = target or Decimal('0')
+    diff = actual - target
+    if target and target != 0:
+        pct = (actual / target) * 100
+    else:
+        pct = Decimal('100') if actual else Decimal('0')
+    sym = currency_symbol or '£'
+    if diff >= 0:
+        label = f"Exceeded target by {sym}{diff:,.2f}" if diff else "On target"
+    else:
+        label = f"Below target by {sym}{abs(diff):,.2f}"
+    return {
+        'target': float(target),
+        'actual': float(actual),
+        'difference': float(diff),
+        'percent': round(float(pct), 1),
+        'label': label,
+    }
+
+
+def get_quarterly_performance(account_id: str, year: int) -> Dict[str, Any]:
+    """
+    Get Achieved and Rebate for each quarter and full year for the given account and year.
+
+    Logic depends on frame agreement type:
+    - Quarterly: target records per Q + year; compare invoice sums to targets; rebate from target.
+    - Quarterly & Volume: same as Quarterly plus year volume target.
+    - Growth: no target records; year rebate = max(0, (fa_total_sales_ty - fa_total_sales_ly) * 0.15); Q1–Q4 = 0.
+
+    Returns structure with Q1, Q2, Q3, Q4, Year each having achieved and rebate; missing data as 0.
+    """
+    year_start = date(year, 1, 1)
+    year_end = date(year, 12, 31)
+    currency_symbol = _currency_symbol_for_account(account_id)
+
+    def zero_period(period_id: str) -> Dict[str, Any]:
+        return {
+            'period': period_id,
+            'achieved': {
+                'target': 0.0,
+                'actual': 0.0,
+                'difference': 0.0,
+                'percent': 0.0,
+                'label': 'No target',
+            },
+            'rebate': 0.0,
+            'rebate_label': f'{currency_symbol}0',
+        }
+
+    result = {
+        'accountId': account_id,
+        'year': year,
+        'currencySymbol': currency_symbol,
+        'agreementType': None,
+        'periods': {
+            'Q1': zero_period('Q1'),
+            'Q2': zero_period('Q2'),
+            'Q3': zero_period('Q3'),
+            'Q4': zero_period('Q4'),
+            'Year': zero_period('Year'),
+        },
+    }
+
+    # Find active frame agreement for this account covering the year
+    fa = (
+        FrameAgreement.objects.filter(
+            fa_account_id=account_id,
+            fa_active=1,
+        ).filter(
+            Q(fa_start_date__lte=year_end) & Q(fa_end_date__gte=year_start)
+        ).first()
+    )
+    if not fa:
+        return result
+
+    result['agreementType'] = fa.fa_agreement_type or ''
+    agreement_type = (fa.fa_agreement_type or '').strip()
+
+    if agreement_type == 'Growth':
+        # No target records; year rebate = max(0, (ty - ly) * 0.15)
+        ty = (fa.fa_total_sales_ty or Decimal('0'))
+        ly = (fa.fa_total_sales_ly or Decimal('0'))
+        growth_rebate = max(Decimal('0'), (ty - ly) * Decimal('0.15'))
+        result['periods']['Year'] = {
+            'period': 'Year',
+            'achieved': {
+                'target': 0.0,
+                'actual': float(ty),
+                'difference': float(ty),
+                'percent': 100.0,
+                'label': 'Growth (no target)',
+            },
+            'rebate': float(growth_rebate),
+            'rebate_label': f'{currency_symbol}{growth_rebate:,.2f} earned' if growth_rebate else f'{currency_symbol}0',
+        }
+        # Q1–Q4 remain zero
+        return result
+
+    # Quarterly or Quarterly & Volume: use targets and invoice sums
+    targets = {
+        t.tgt_quarter: t
+        for t in Target.objects.filter(
+            tgt_frame_agreement_id=fa.fa_sf_id,
+            tgt_active=1,
+        ).filter(
+            tgt_quarter__in=['Q1', 'Q2', 'Q3', 'Q4', 'Year']
+        )
+    }
+
+    # Invoice actuals per quarter and full year
+    actuals = {}
+    for q in range(1, 5):
+        start_d, end_d = _quarter_start_end(year, q)
+        actuals[f'Q{q}'] = _invoice_sum(account_id, start_d, end_d)
+    actuals['Year'] = _invoice_sum(account_id, year_start, year_end)
+
+    for period_id in ['Q1', 'Q2', 'Q3', 'Q4', 'Year']:
+        actual = actuals.get(period_id, Decimal('0'))
+        tgt = targets.get(period_id)
+        target_val = tgt.tgt_net_turnover_target if tgt else Decimal('0')
+        achieved = _period_achieved(actual, target_val, currency_symbol)
+        rebate_val = Decimal('0')
+        if tgt and actual >= target_val and target_val > 0:
+            rebate_val = tgt.tgt_rebate_if_achieved or Decimal('0')
+        result['periods'][period_id] = {
+            'period': period_id,
+            'achieved': achieved,
+            'rebate': float(rebate_val),
+            'rebate_label': f'{currency_symbol}{rebate_val:,.2f} earned' if rebate_val else f'{currency_symbol}0',
+        }
+
+    return result

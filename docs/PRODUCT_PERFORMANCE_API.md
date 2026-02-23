@@ -1,4 +1,4 @@
-# Product Performance Variance API
+# Product Performance Deviation API
 
 ## Overview
 
@@ -7,7 +7,7 @@ API endpoint to fetch top and bottom performing products based on deviation betw
 ## Endpoint
 
 ```
-GET /api/products/performance
+GET /api/products/performance/deviation/
 ```
 
 ## Query Parameters
@@ -21,8 +21,8 @@ GET /api/products/performance
 ### Examples
 
 ```
-GET /api/products/performance?account_id=0011234567890ABC&from=2025-07&to=2025-12
-GET /api/products/performance?account_id=0011234567890ABC&from=2026-02&to=2026-02
+GET /api/products/performance/deviation/?account_id=0011234567890ABC&from=2025-07&to=2025-12
+GET /api/products/performance/deviation/?account_id=0011234567890ABC&from=2026-02&to=2026-02
 ```
 
 ## Business Logic
