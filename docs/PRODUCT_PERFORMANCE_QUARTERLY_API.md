@@ -1,115 +1,290 @@
-# Cursor Prompt: Quarterly & Year Performance API (Achieved + Rebate)
+# Product Performance Achieved API (by Quarter or Year)
 
-## API contract
+## Overview
 
-- **Endpoint:** `GET /api/products/performance/achieved/`
-- **Query parameters:**
-  - `account_id` (required): Salesforce Account ID (e.g. `0011234567890ABC`)
-  - `year` (required): Calendar year, e.g. `2026`
+API endpoint to fetch achieved (target vs actual) and rebate for each quarter (Q1–Q4) and for the full year. Logic depends on the account’s frame agreement type: **Quarterly**, **Quarterly & Volume**, or **Growth**. Missing data is returned as 0. Currency symbol is derived from the account’s `acc_currency_iso_code`.
 
-**Example:**  
-`GET /api/products/performance/achieved/?account_id=001XXX&year=2026`
+## Endpoint
 
----
+```
+GET /api/products/performance/achieved/
+```
 
-## Response shape (always return all quarters and year)
+## Query Parameters
 
-Return **Achieved** and **Rebate** for each of Q1, Q2, Q3, Q4 and **Year**. If no data exists for a period, use **0** (and still include the period).
+| Parameter   | Type   | Required | Format     | Description                          |
+|------------|--------|----------|------------|--------------------------------------|
+| `account_id` | string | Yes      | Salesforce ID | Account ID to filter by              |
+| `year`       | integer | Yes     | e.g. 2026  | Calendar year for quarters and year  |
 
-- **Achieved:** target vs actual (invoices) for that period: **money difference** and **percentage** (e.g. “Exceeded Q1 Target by £2,000”, “120.0%”, or “Below target” when not met).
-- **Rebate:** rebate earned for that period (e.g. “Rebate: £500 earned”). If none, return 0 / “£0”.
+### Examples
 
-Example UI-style strings (backend can return structured data and let frontend format):
+```
+GET /api/products/performance/achieved/?account_id=0011234567890ABC&year=2026
+GET /api/products/performance/achieved/?account_id=001XXX&year=2025
+```
 
-- **ACHIEVED:** “Exceeded Q1 Target by £2,000”, “£2,000”, “120.0%”
-- **Rebate:** “£500 earned”
+## Business Logic
 
-All periods must be present: **Q1, Q2, Q3, Q4, Year**. Missing data → **0** (and no nulls for numeric/string fields that the frontend will display).
-
----
-
-## Data sources (DB / SF mapping)
+### Data Sources
 
 - **Account:** `accounts.acc_sf_id` = `account_id`
-- **Frame agreement (contact/account):** `frame_agreements.fa_account_id` = account, `frame_agreements.fa_agreement_type` = type.  
-  (In SF this may be on Contact as `Frame_Agreement_Type_SP__c`; in this backend it is on **Frame Agreement** as `fa_agreement_type`.)
-- **Agreement type** controls logic (see below): `Quarterly`, `Quarterly & Volume`, `Growth`.
-- **Targets:** `targets.tgt_frame_agreement_id`, `tgt_quarter` (e.g. `Q1`, `Q2`, `Q3`, `Q4`, `Year`), `tgt_net_turnover_target` (= `Net_Turnover_Target__c`), `tgt_rebate_if_achieved`, `tgt_rebate_rate`, etc.
-- **Actuals:** from **invoices**: same account, sum of `inv_net_price` (or equivalent total per invoice) by quarter and for full year. Use `inv_invoice_date` to assign quarter and year. Consider only closed/valid invoices if that matches existing product performance rules.
+- **Frame agreement:** `frame_agreements.fa_account_id` = account, `frame_agreements.fa_agreement_type` = type (Salesforce: `Frame_Agreement_Type_SP__c`; backend: `fa_agreement_type`)
+- **Agreement types:** `Quarterly`, `Quarterly & Volume`, `Growth`
+- **Targets:** `targets.tgt_frame_agreement_id`, `tgt_quarter` (Q1, Q2, Q3, Q4, Year), `tgt_net_turnover_target`, `tgt_rebate_if_achieved`, `tgt_rebate_rate`
+- **Actuals:** Invoices for the account; sum of `inv_net_price` by quarter and full year using `inv_invoice_date`
 
----
+### Invoice Actuals (Quarter and Year)
 
-## Business logic by agreement type
+**Source:** `invoices.inv_net_price`
 
-### 1. Quarterly
+**Filters:**
+- `invoices.inv_account_id` = :account_id
+- `invoices.inv_invoice_date` within quarter or year range
+- `invoices.inv_status` = 'Closed'
+- `invoices.inv_valid` = true
+- `invoices.inv_invoice_type` != 'Credit Note'
 
-- **Targets:**  
-  - One target record **per quarter** (Q1–Q4) with `tgt_net_turnover_target`.  
-  - One target record for the **year** with `tgt_quarter = 'Year'` (or equivalent) and `tgt_net_turnover_target`.
-- **Actuals:**  
-  - Per quarter: sum of invoice amount (e.g. `inv_net_price`) for that account and quarter (derive quarter from `inv_invoice_date`).  
-  - Full year: sum for that account and year.
-- **Achieved (per quarter and year):**  
-  - Compare **actual** to **target** (`tgt_net_turnover_target`).  
-  - Return: **money difference** (actual − target) and **percentage** (e.g. (actual / target) × 100).  
-  - If no target for that period → treat as 0 target and still return money and % (or “N/A” only if product owner explicitly wants that).
-- **Rebate:**  
-  - From target: e.g. `tgt_rebate_if_achieved` when target is met for that period; otherwise 0.  
-  - Return rebate amount per quarter and for the year (if there is a year-level rebate/target). If not available → 0.
+**Aggregation:**
+- Per quarter: sum for dates in that quarter (Q1: Jan–Mar, Q2: Apr–Jun, Q3: Jul–Sep, Q4: Oct–Dec)
+- Full year: sum for dates in the given calendar year
 
-### 2. Quarterly & Volume
+### Agreement Type: Quarterly
 
-- Same as **Quarterly** for:
-  - Per-quarter targets and actuals, and year target vs full-year actual.
-  - Achieved: money + % per quarter and for year.
-  - Rebate per quarter and year as above.
-- **Additionally:**  
-  - There is a **year-level volume** target (again `tgt_net_turnover_target` on the year target record).  
-  - Compare **full-year invoice total** to this year target; show **money + %** for the year (same format as above).  
-  - Rebate for year as above (e.g. from year target’s `tgt_rebate_if_achieved` when achieved).
+- **Targets:** One target record per quarter (Q1–Q4) and one for the year (`tgt_quarter` = 'Year') with `tgt_net_turnover_target`.
+- **Actuals:** Invoice sum per quarter and for full year (as above).
+- **Achieved (per quarter and year):**
+  - `difference = actual - target`
+  - `percent = (actual / target) * 100` (if target > 0; else 0 or 100 as defined)
+  - Label: e.g. "Exceeded target by £X" or "Below target by £X"
+- **Rebate:** `tgt_rebate_if_achieved` when actual ≥ target for that period; otherwise 0.
 
-### 3. Growth
+### Agreement Type: Quarterly & Volume
 
-- **No target records** for quarters/year.
-- **Formula (year-level):**  
-  `IF((Total_Sales_This_Year__c - Total_Sales_Last_Year__c) * 0.15 < 0, 0, (Total_Sales_This_Year__c - Total_Sales_Last_Year__c) * 0.15)`
-- **Mapping:**  
-  - `Total_Sales_This_Year__c` → e.g. `frame_agreements.fa_total_sales_ty`  
-  - `Total_Sales_Last_Year__c` → e.g. `frame_agreements.fa_total_sales_ly`  
-  - So: **growth_rebate = max(0, (fa_total_sales_ty - fa_total_sales_ly) * 0.15)**.
-- **Response:**  
-  - **Q1–Q4:** No targets → return **Achieved** and **Rebate** as **0** (or “N/A” if agreed).  
-  - **Year:** Return the **growth rebate** as money and, if useful, a percentage (e.g. vs last year).  
-  - No per-quarter rebate/target for Growth.
+- Same as **Quarterly** for per-quarter and year targets, actuals, achieved (money + %), and rebate.
+- Additionally: year-level volume target (`tgt_net_turnover_target` for `tgt_quarter` = 'Year'); compare full-year invoice total to this target; rebate from year target when achieved.
 
----
+### Agreement Type: Growth
 
-## Quarter and year boundaries
+- **No target records** for quarters or year.
+- **Year rebate formula:** `growth_rebate = max(0, (fa_total_sales_ty - fa_total_sales_ly) * 0.15)`
+  - `fa_total_sales_ty` = Total Sales This Year (`Total_Sales_This_Year__c`)
+  - `fa_total_sales_ly` = Total Sales Last Year (`Total_Sales_Last_Year__c`)
+- **Q1–Q4:** Achieved and rebate returned as 0.
+- **Year:** Return growth rebate as money; achieved can show "Growth (no target)" with actual = fa_total_sales_ty.
 
-- **Quarters:** Calendar quarters: Q1 = Jan–Mar, Q2 = Apr–Jun, Q3 = Jul–Sep, Q4 = Oct–Dec (based on `inv_invoice_date`).
+### Quarter and Year Boundaries
+
+- **Quarters:** Calendar: Q1 = Jan–Mar, Q2 = Apr–Jun, Q3 = Jul–Sep, Q4 = Oct–Dec (from `inv_invoice_date`).
 - **Year:** Full calendar year for the given `year` parameter.
 
----
+### Edge Cases
 
-## Edge cases
+- **No frame agreement** for account/year: return all periods (Q1–Q4, Year) with achieved and rebate 0.
+- **Missing target for a period:** Use target = 0; still return actual, difference, and percent (or N/A as defined).
+- **No invoices for a period:** Actual = 0; achieved = −target (money), 0% (or as defined); rebate = 0.
+- **Unknown agreement type:** Treat as no data; return 0 for all periods or map to closest type per product owner.
 
-- **No frame agreement** for account/year: return all periods (Q1–Q4, Year) with Achieved and Rebate **0**.
-- **Unknown agreement type:** Treat like “no data” and return 0 for all, or map to the closest type (e.g. default to Quarterly) per product owner.
-- **Missing target for a quarter/year:** Use target = 0 for that period; still return actual and % (or “N/A” if required).
-- **No invoices for a period:** Actual = 0; Achieved = −target (money) and 0% (or as defined); Rebate = 0.
+## Response Format
 
----
+### Success Response (200 OK)
 
-## Implementation checklist
+```json
+{
+  "success": true,
+  "message": "Achieved (by quarter or year) retrieved successfully",
+  "data": {
+    "accountId": "0011234567890ABC",
+    "year": 2026,
+    "currencySymbol": "£",
+    "agreementType": "Quarterly",
+    "periods": {
+      "Q1": {
+        "period": "Q1",
+        "achieved": {
+          "target": 10000.0,
+          "actual": 12000.0,
+          "difference": 2000.0,
+          "percent": 120.0,
+          "label": "Exceeded target by £2,000.00"
+        },
+        "rebate": 500.0,
+        "rebate_label": "£500.00 earned"
+      },
+      "Q2": {
+        "period": "Q2",
+        "achieved": {
+          "target": 10000.0,
+          "actual": 9500.0,
+          "difference": -500.0,
+          "percent": 95.0,
+          "label": "Below target by £500.00"
+        },
+        "rebate": 0.0,
+        "rebate_label": "£0"
+      },
+      "Q3": {
+        "period": "Q3",
+        "achieved": {
+          "target": 0.0,
+          "actual": 0.0,
+          "difference": 0.0,
+          "percent": 0.0,
+          "label": "No target"
+        },
+        "rebate": 0.0,
+        "rebate_label": "£0"
+      },
+      "Q4": {
+        "period": "Q4",
+        "achieved": {
+          "target": 0.0,
+          "actual": 0.0,
+          "difference": 0.0,
+          "percent": 0.0,
+          "label": "No target"
+        },
+        "rebate": 0.0,
+        "rebate_label": "£0"
+      },
+      "Year": {
+        "period": "Year",
+        "achieved": {
+          "target": 40000.0,
+          "actual": 41500.0,
+          "difference": 1500.0,
+          "percent": 103.75,
+          "label": "Exceeded target by £1,500.00"
+        },
+        "rebate": 1200.0,
+        "rebate_label": "£1,200.00 earned"
+      }
+    }
+  }
+}
+```
 
-1. Resolve **account** by `account_id` and **frame agreement** for that account covering the given **year** (e.g. `fa_start_date`/`fa_end_date` or `fa_start_year`).
-2. Read **agreement type** (`fa_agreement_type`) and branch: **Quarterly**, **Quarterly & Volume**, or **Growth**.
-3. For **Quarterly** and **Quarterly & Volume:**  
-   - Load **targets** for the frame agreement: Q1, Q2, Q3, Q4, Year (use `tgt_quarter`).  
-   - Compute **invoice totals** per quarter and full year (same account, `inv_invoice_date` in range, closed/valid as per existing rules).  
-   - For each period: **Achieved** = (actual, target, difference, %) and **Rebate** = from target when achieved.
-4. For **Growth:**  
-   - Use `fa_total_sales_ty` and `fa_total_sales_ly`; compute growth rebate; return 0 for Q1–Q4 and year achieved/rebate as above.
-5. **Response:** Always return a fixed structure: **Q1, Q2, Q3, Q4, Year**, each with **achieved** (money diff, percentage, label) and **rebate** (amount). Use **0** when data is not available.
+All periods (Q1, Q2, Q3, Q4, Year) are always present. Missing data uses 0 for numeric fields and appropriate labels (e.g. "No target", "£0").
 
-This prompt is intended for Cursor (or similar) to implement the API and service logic consistently with the existing codebase and DB schema.
+### Error Responses
+
+#### 422 Unprocessable Entity - Missing account_id
+
+```json
+{
+  "success": false,
+  "message": "Invalid query parameters",
+  "errors": [
+    {
+      "field": "account_id",
+      "message": "account_id is required"
+    }
+  ]
+}
+```
+
+#### 422 Unprocessable Entity - Missing year
+
+```json
+{
+  "success": false,
+  "message": "Invalid query parameters",
+  "errors": [
+    {
+      "field": "year",
+      "message": "year is required"
+    }
+  ]
+}
+```
+
+#### 422 Unprocessable Entity - Invalid year
+
+```json
+{
+  "success": false,
+  "message": "Invalid query parameters",
+  "errors": [
+    {
+      "field": "year",
+      "message": "year must be an integer (e.g. 2026)"
+    }
+  ]
+}
+```
+
+#### 422 Unprocessable Entity - Year out of range
+
+```json
+{
+  "success": false,
+  "message": "Invalid query parameters",
+  "errors": [
+    {
+      "field": "year",
+      "message": "year must be between 2000 and 2100"
+    }
+  ]
+}
+```
+
+## Implementation Architecture
+
+### Layer Structure
+
+```
+Controller Layer (views.py)
+    ↓
+Service Layer (services.py)
+    ↓
+Models: Account, FrameAgreement, Target, Invoice
+```
+
+### Components
+
+1. **Service Layer**
+   - Resolve account and frame agreement for the given account_id and year (date overlap: `fa_start_date` / `fa_end_date`).
+   - Read `fa_agreement_type` and branch: Quarterly, Quarterly & Volume, or Growth.
+   - For Quarterly / Quarterly & Volume: load targets (Q1–Q4, Year); compute invoice sums per quarter and full year; for each period compute achieved (target, actual, difference, percent, label) and rebate.
+   - For Growth: use `fa_total_sales_ty` and `fa_total_sales_ly`; compute growth rebate; return 0 for Q1–Q4.
+   - Resolve currency symbol from account’s `acc_currency_iso_code` (e.g. GBP → £).
+
+2. **Controller Layer**
+   - Validate query parameters (account_id required, year required, year integer and in 2000–2100).
+   - Call service layer (`get_quarterly_performance`).
+   - Return standardized response format (success, message, data).
+
+## Database Indexes
+
+### Relevant Indexes
+
+- `frame_agreements`: `fa_account_id`, `fa_start_date`, `fa_end_date`
+- `targets`: `tgt_frame_agreement_id`, `tgt_quarter`
+- `invoices`: `inv_account_id`, `inv_invoice_date`, `inv_status`, `inv_valid`
+- `accounts`: `acc_sf_id` (primary key), `acc_currency_iso_code`
+
+## Performance Considerations
+
+1. **Single account and year:** Queries are scoped by account_id and year; frame agreement and targets are filtered accordingly.
+2. **Invoice aggregation:** Sum `inv_net_price` per quarter and year in one or few queries (e.g. by quarter buckets or single pass with date filters).
+3. **Currency symbol:** One account lookup for `acc_currency_iso_code`; map to symbol via a small static map (e.g. GBP → £).
+4. **Missing data:** No nulls in response; use 0 and fixed structure (Q1–Q4, Year) for predictable frontend consumption.
+
+## Implementation Checklist
+
+- [x] Resolve account and frame agreement for account_id and year
+- [x] Branch logic by agreement type (Quarterly, Quarterly & Volume, Growth)
+- [x] Load targets for Q1–Q4 and Year where applicable
+- [x] Compute invoice actuals per quarter and full year with correct filters
+- [x] Compute achieved (target, actual, difference, percent, label) and rebate per period
+- [x] Growth: compute year rebate from fa_total_sales_ty and fa_total_sales_ly; Q1–Q4 = 0
+- [x] Return fixed structure with all periods; use 0 for missing data
+- [x] Validate account_id and year; return 422 with field errors
+- [x] Use account currency for symbol in labels and response
+
+## Notes
+
+- Uses existing project response wrapper structure (success, message, data).
+- Currency symbol comes from `accounts.acc_currency_iso_code`; extend `CURRENCY_SYMBOLS` in services for more codes.
+- Frame agreement is selected by account and date overlap with the requested year; one active agreement per account/year in scope.
+- This document aligns with the structure and style of the Product Performance Deviation API doc.
