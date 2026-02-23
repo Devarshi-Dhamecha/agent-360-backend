@@ -2,6 +2,7 @@
 Product Performance API views.
 """
 from drf_spectacular.utils import (
+    OpenApiExample,
     OpenApiParameter,
     OpenApiResponse,
     OpenApiTypes,
@@ -15,8 +16,10 @@ from core.api.responses import APIResponse, ErrorResponse
 from .serializers import (
     ProductPerformanceResponseSerializer,
     QuarterlyPerformanceResponseSerializer,
+    RfcByMonthResponseSerializer,
 )
 from .services import ProductPerformanceService, get_quarterly_performance
+from . import rfc_services
 
 
 class QuarterlyPerformanceAPIView(APIView):
@@ -198,3 +201,180 @@ class ProductDeviationPerformanceAPIView(APIView):
                 message="An error occurred while retrieving product performance data",
                 error_code="PERFORMANCE_CALCULATION_ERROR",
             )
+
+
+class RfcByMonthAPIView(APIView):
+    """
+    GET /api/products/rfc-by-month/
+
+    Returns Draft and Approved RFC qty/value plus Last Year (LY) qty/value per product per month.
+    Optional from/to; when omitted, range = current month through same month next year; LY = same window back one year.
+    """
+
+    permission_classes = [AllowAny]
+
+    @extend_schema(
+        tags=["Products"],
+        summary="RFC by month (Draft + Approved + LY)",
+        description=(
+            "Returns both Draft and Approved RFC quantity/value and Last Year (LY) quantity/value "
+            "per product per month. Pass account_id and product_ids (comma-separated). "
+            "Optional from/to (YYYY-MM); if omitted, range = current month to same month next year, LY = that window − 1 year. "
+            "Frontend switches Draft vs Approved using data keys (draftRfcQty/draftRfcValue vs approvedRfcQty/approvedRfcValue)."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="account_id",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="Salesforce Account ID",
+            ),
+            OpenApiParameter(
+                name="product_ids",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=True,
+                description="Comma-separated product Salesforce IDs (e.g. PRD-001,PRD-002)",
+            ),
+            OpenApiParameter(
+                name="from",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Start month YYYY-MM (optional; default: current month)",
+            ),
+            OpenApiParameter(
+                name="to",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="End month YYYY-MM (optional; default: same month next year)",
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(
+                response=RfcByMonthResponseSerializer,
+                description=(
+                    "RFC by month. Response data includes: accountId, from (start month YYYY-MM), to, currencySymbol, "
+                    "products[].productId, productName, months[].month, monthLabel, lyQty, lyValue, "
+                    "draftRfcQty, draftRfcValue, approvedRfcQty, approvedRfcValue."
+                ),
+                examples=[
+                    OpenApiExample(
+                        "Success",
+                        value={
+                            "success": True,
+                            "message": "RFC by month retrieved successfully",
+                            "data": {
+                                "accountId": "0011234567890ABC",
+                                "from": "2026-02",
+                                "to": "2026-09",
+                                "currencySymbol": "£",
+                                "products": [
+                                    {
+                                        "productId": "PRD-001",
+                                        "productName": "Roundup",
+                                        "months": [
+                                            {
+                                                "month": "2026-02",
+                                                "monthLabel": "February 2026",
+                                                "lyQty": 0.0,
+                                                "lyValue": 35000.0,
+                                                "draftRfcQty": 250.0,
+                                                "draftRfcValue": 225000.0,
+                                                "approvedRfcQty": 240.0,
+                                                "approvedRfcValue": 216000.0,
+                                            },
+                                        ],
+                                    },
+                                ],
+                            },
+                        },
+                        response_only=True,
+                        status_codes=["200"],
+                    ),
+                ],
+            ),
+            422: OpenApiResponse(
+                response=OpenApiTypes.OBJECT,
+                description="Validation error (missing account_id/product_ids, invalid date range or format).",
+                examples=[
+                    OpenApiExample(
+                        "Missing account_id",
+                        value={
+                            "success": False,
+                            "message": "Invalid query parameters",
+                            "errors": [
+                                {"field": "account_id", "message": "account_id is required"}
+                            ],
+                        },
+                        response_only=True,
+                        status_codes=["422"],
+                    ),
+                    OpenApiExample(
+                        "Missing product_ids",
+                        value={
+                            "success": False,
+                            "message": "Invalid query parameters",
+                            "errors": [
+                                {"field": "product_ids", "message": "At least one product_id is required"}
+                            ],
+                        },
+                        response_only=True,
+                        status_codes=["422"],
+                    ),
+                ],
+            ),
+        },
+    )
+    def get(self, request):
+        account_id = (request.query_params.get("account_id") or "").strip()
+        product_ids_raw = (request.query_params.get("product_ids") or "").strip()
+        from_month = (request.query_params.get("from") or "").strip()
+        to_month = (request.query_params.get("to") or "").strip()
+
+        if not account_id:
+            return ErrorResponse.validation_error(
+                message="Invalid query parameters",
+                errors=[{"field": "account_id", "message": "account_id is required"}],
+            )
+        if not product_ids_raw:
+            return ErrorResponse.validation_error(
+                message="Invalid query parameters",
+                errors=[{"field": "product_ids", "message": "At least one product_id is required"}],
+            )
+
+        product_ids = [p.strip() for p in product_ids_raw.split(",") if p.strip()]
+        if not product_ids:
+            return ErrorResponse.validation_error(
+                message="Invalid query parameters",
+                errors=[{"field": "product_ids", "message": "At least one product_id is required"}],
+            )
+
+        if from_month and to_month:
+            try:
+                from_date, to_date = rfc_services._parse_dates(from_month, to_month)
+                if from_date > to_date:
+                    return ErrorResponse.validation_error(
+                        message="Invalid date range",
+                        errors=[{"field": "to", "message": "End month must be on or after start month"}],
+                    )
+            except (ValueError, IndexError) as e:
+                return ErrorResponse.validation_error(
+                    message="Invalid date format",
+                    errors=[{"field": "from/to", "message": "Must be YYYY-MM"}],
+                )
+        else:
+            from_date, to_date = rfc_services._default_month_range()
+
+        data = rfc_services.get_rfc_by_month(
+            account_id=account_id,
+            product_ids=product_ids,
+            from_date=from_date,
+            to_date=to_date,
+        )
+        return APIResponse.success(
+            data=data,
+            message="RFC by month retrieved successfully",
+        )

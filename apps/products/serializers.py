@@ -2,6 +2,7 @@
 Product Performance API serializers.
 """
 from rest_framework import serializers
+from drf_spectacular.utils import extend_schema_serializer
 
 
 class ProductPerformanceSerializer(serializers.Serializer):
@@ -52,3 +53,38 @@ class QuarterlyPerformanceResponseSerializer(serializers.Serializer):
         child=QuarterlyPeriodSerializer(),
         allow_empty=True,
     )
+
+
+# --- RFC by month (Draft + Approved + LY) ---
+
+
+class RfcByMonthItemSerializer(serializers.Serializer):
+    """One month: LY + draft + approved."""
+    month = serializers.CharField()
+    monthLabel = serializers.CharField()
+    lyQty = serializers.FloatField()
+    lyValue = serializers.FloatField()
+    draftRfcQty = serializers.FloatField()
+    draftRfcValue = serializers.FloatField()
+    approvedRfcQty = serializers.FloatField()
+    approvedRfcValue = serializers.FloatField()
+
+
+class RfcByMonthProductSerializer(serializers.Serializer):
+    """One product with months."""
+    productId = serializers.CharField()
+    productName = serializers.CharField()
+    months = RfcByMonthItemSerializer(many=True)
+
+
+@extend_schema_serializer(
+    component_name="RfcByMonthResponse",
+    description="RFC by month. Top-level data: accountId, from (start month YYYY-MM), to, currencySymbol, products. Each product has months[] with month, monthLabel, lyQty, lyValue, draftRfcQty, draftRfcValue, approvedRfcQty, approvedRfcValue. Note: actual JSON uses key 'from' for start month.",
+)
+class RfcByMonthResponseSerializer(serializers.Serializer):
+    """RFC by month response wrapper. Actual response data uses key 'from' for start month."""
+    accountId = serializers.CharField()
+    from_ = serializers.CharField(source="from", required=False)
+    to = serializers.CharField()
+    currencySymbol = serializers.CharField(allow_null=True, required=False)
+    products = RfcByMonthProductSerializer(many=True)

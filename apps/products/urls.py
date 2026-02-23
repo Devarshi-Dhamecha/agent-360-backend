@@ -19,6 +19,11 @@ urlpatterns = [
         views.ProductDeviationPerformanceAPIView.as_view(),
         name="performance_deviation",
     ),
+    path(
+        "rfc-by-month/",
+        views.RfcByMonthAPIView.as_view(),
+        name="rfc_by_month",
+    ),
 ]
 
 # Sales Analytics URLs
