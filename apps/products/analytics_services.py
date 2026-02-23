@@ -77,7 +77,7 @@ class SalesAnalyticsService:
             FROM
                 products prd
             LEFT JOIN
-                order_line_items ori ON ori.ori_product_id = prd.prd_sf_id AND ori.ori_active = 1
+                order_items ori ON ori.ori_product_id = prd.prd_sf_id AND ori.ori_active = 1
             LEFT JOIN
                 orders ord ON ord.ord_sf_id = ori.ori_order_id
             WHERE
@@ -95,7 +95,7 @@ class SalesAnalyticsService:
             FROM
                 products prd
             LEFT JOIN
-                order_line_items ori ON ori.ori_product_id = prd.prd_sf_id AND ori.ori_active = 1
+                order_items ori ON ori.ori_product_id = prd.prd_sf_id AND ori.ori_active = 1
             LEFT JOIN
                 orders ord ON ord.ord_sf_id = ori.ori_order_id
             WHERE
@@ -201,7 +201,7 @@ class SalesAnalyticsService:
                 COALESCE(SUM(ori.ori_ordered_amount), 0) AS actual_sales,
                 COALESCE(SUM(ori.ori_open_amount), 0) AS open_sales
             FROM
-                order_line_items ori
+                order_items ori
             JOIN
                 orders ord ON ord.ord_sf_id = ori.ori_order_id
             JOIN
@@ -221,7 +221,7 @@ class SalesAnalyticsService:
                 ori.ori_product_id AS product_id,
                 COALESCE(SUM(ori.ori_ordered_amount), 0) AS last_year_sales
             FROM
-                order_line_items ori
+                order_items ori
             JOIN
                 orders ord ON ord.ord_sf_id = ori.ori_order_id
             JOIN
@@ -332,7 +332,7 @@ class SalesAnalyticsService:
             COALESCE(SUM(ori.ori_open_quantity), 0) AS open_quantity,
             COALESCE(SUM(ori.ori_open_amount), 0) AS open_amount
         FROM
-            order_line_items ori
+            order_items ori
         JOIN
             orders ord ON ord.ord_sf_id = ori.ori_order_id
         WHERE
@@ -396,7 +396,7 @@ class SalesAnalyticsService:
             COALESCE(SUM(ori.ori_open_quantity), 0) AS open_quantity,
             COALESCE(SUM(ori.ori_open_amount), 0) AS open_amount
         FROM
-            order_line_items ori
+            order_items ori
         JOIN
             orders ord ON ord.ord_sf_id = ori.ori_order_id
         JOIN

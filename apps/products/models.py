@@ -856,10 +856,10 @@ class Order(models.Model):
         verbose_name = 'Order'
         verbose_name_plural = 'Orders'
         indexes = [
-            models.Index(fields=['ord_account_id'], name='idx_orders_account'),
+            models.Index(fields=['ord_account_id'], name='idx_orders_account_id'),
+            models.Index(fields=['ord_owner_id'], name='idx_orders_owner_id'),
             models.Index(fields=['ord_status'], name='idx_orders_status'),
-            models.Index(fields=['ord_effective_date'], name='idx_orders_effective_date'),
-            models.Index(fields=['ord_owner_id'], name='idx_orders_owner'),
+            models.Index(fields=['ord_last_modified_date'], name='idx_orders_last_modified'),
         ]
 
     def __str__(self):
@@ -1011,12 +1011,13 @@ class OrderLineItem(models.Model):
     )
 
     class Meta:
-        db_table = 'order_line_items'
+        db_table = 'order_items'
         verbose_name = 'Order Line Item'
         verbose_name_plural = 'Order Line Items'
         indexes = [
-            models.Index(fields=['ori_order_id'], name='idx_order_line_items_order'),
-            models.Index(fields=['ori_product_id'], name='idx_order_line_items_product'),
+            models.Index(fields=['ori_order_id'], name='idx_order_items_order_id'),
+            models.Index(fields=['ori_product_id'], name='idx_order_items_product_id'),
+            models.Index(fields=['ori_last_modified_date'], name='idx_order_items_last_modified'),
         ]
 
     def __str__(self):
