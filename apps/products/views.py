@@ -220,10 +220,10 @@ class RfcByMonthAPIView(APIView):
         tags=["Products"],
         summary="RFC by month (Draft + Approved + LY)",
         description=(
-            "Returns both Draft and Approved RFC quantity/value and Last Year (LY) quantity/value "
+            "Returns both Draft and Approved RFC quantity, value, and unit price plus Last Year (LY) quantity/value "
             "per product per month. Pass account_id and product_ids (comma-separated). "
             "Optional from/to (YYYY-MM); if omitted, range = current month to same month next year, LY = that window − 1 year. "
-            "Frontend switches Draft vs Approved using data keys (draftRfcQty/draftRfcValue vs approvedRfcQty/approvedRfcValue)."
+            "Response includes draftRfcUnitPrice and approvedRfcUnitPrice per product/month (null when none)."
         ),
         parameters=[
             OpenApiParameter(
@@ -261,7 +261,7 @@ class RfcByMonthAPIView(APIView):
                 description=(
                     "RFC by month. Response data includes: accountId, from (start month YYYY-MM), to, currencySymbol, "
                     "products[].productId, productName, months[].month, monthLabel, lyQty, lyValue, "
-                    "draftRfcQty, draftRfcValue, approvedRfcQty, approvedRfcValue."
+                    "draftRfcQty, draftRfcValue, draftRfcUnitPrice, approvedRfcQty, approvedRfcValue, approvedRfcUnitPrice, rejectionReason."
                 ),
                 examples=[
                     OpenApiExample(
@@ -286,8 +286,10 @@ class RfcByMonthAPIView(APIView):
                                                 "lyValue": 35000.0,
                                                 "draftRfcQty": 250.0,
                                                 "draftRfcValue": 225000.0,
+                                                "draftRfcUnitPrice": 900.0,
                                                 "approvedRfcQty": 240.0,
                                                 "approvedRfcValue": 216000.0,
+                                                "approvedRfcUnitPrice": 900.0,
                                                 "rejectionReason": None,
                                             },
                                         ],

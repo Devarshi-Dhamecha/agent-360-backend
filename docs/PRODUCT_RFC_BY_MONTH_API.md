@@ -135,8 +135,8 @@ If a product has no invoices in a given month last year, return 0 for that month
 
 **Source:**
 
-- **Draft:** `arf_rolling_forecasts.arf_draft_quantity`, `arf_rolling_forecasts.arf_draft_value` (rows where status is Draft, Pending_Approval, Fixes_Needed, or as per business rules).
-- **Approved:** `arf_rolling_forecasts.arf_approved_quantity`, `arf_rolling_forecasts.arf_approved_value` (rows where `arf_status` = 'Approved').
+- **Draft:** `arf_rolling_forecasts.arf_draft_quantity`, `arf_rolling_forecasts.arf_draft_value`, `arf_rolling_forecasts.arf_draft_unit_price` (rows where status is Draft, Pending_Approval, Fixes_Needed, or as per business rules).
+- **Approved:** `arf_rolling_forecasts.arf_approved_quantity`, `arf_rolling_forecasts.arf_approved_value`, `arf_rolling_forecasts.arf_approved_unit_price` (rows where `arf_status` = 'Approved').
 
 **Filters:**
 
@@ -150,18 +150,20 @@ If a product has no invoices in a given month last year, return 0 for that month
 **Aggregation (per product, per month):**
 
 - For each product and each month in the range, return **both**:
-  - **Draft:** `draftRfcQty` = SUM(arf_draft_quantity), `draftRfcValue` = SUM(arf_draft_value)
-  - **Approved:** `approvedRfcQty` = SUM(arf_approved_quantity), `approvedRfcValue` = SUM(arf_approved_value)
+  - **Draft:** `draftRfcQty` = SUM(arf_draft_quantity), `draftRfcValue` = SUM(arf_draft_value), `draftRfcUnitPrice` = MAX(arf_draft_unit_price) (one per product/month; null when none)
+  - **Approved:** `approvedRfcQty` = SUM(arf_approved_quantity), `approvedRfcValue` = SUM(arf_approved_value), `approvedRfcUnitPrice` = MAX(arf_approved_unit_price) (one per product/month; null when none)
 
-If there is no forecast row for a product in a given month, return 0 (or null; document which) for that month’s draft and approved qty/value.
+If there is no forecast row for a product in a given month, return 0 (or null; document which) for that month’s draft and approved qty/value, and null for unit prices.
 
 **Formula:**
 
 ```
-draftRfcQty     = SUM(arf_draft_quantity)   per product/month (Draft-status rows)
-draftRfcValue   = SUM(arf_draft_value)      per product/month
-approvedRfcQty  = SUM(arf_approved_quantity) per product/month (Approved-status rows)
-approvedRfcValue= SUM(arf_approved_value)   per product/month
+draftRfcQty        = SUM(arf_draft_quantity)    per product/month (Draft-status rows)
+draftRfcValue      = SUM(arf_draft_value)      per product/month
+draftRfcUnitPrice  = MAX(arf_draft_unit_price) per product/month (null when none)
+approvedRfcQty     = SUM(arf_approved_quantity) per product/month (Approved-status rows)
+approvedRfcValue   = SUM(arf_approved_value)   per product/month
+approvedRfcUnitPrice = MAX(arf_approved_unit_price) per product/month (null when none)
 ```
 
 ---
@@ -192,8 +194,8 @@ approvedRfcValue= SUM(arf_approved_value)   per product/month
 Response includes **accountId**, **from**, **to**, **currencySymbol**, and **products** (each with **productId**, **productName**, **months**). Each month object includes **both** Draft and Approved data so the frontend can switch by key:
 
 - **lyQty**, **lyValue** – last year (same window, previous year)
-- **draftRfcQty**, **draftRfcValue** – current year draft RFC
-- **approvedRfcQty**, **approvedRfcValue** – current year approved RFC
+- **draftRfcQty**, **draftRfcValue**, **draftRfcUnitPrice** – current year draft RFC (unit price per product/month; null when none)
+- **approvedRfcQty**, **approvedRfcValue**, **approvedRfcUnitPrice** – current year approved RFC (unit price per product/month; null when none)
 - **rejectionReason** – optional; from `arf_rolling_forecasts.arf_rejection_reason` (one per product/month when present; null when none)
 
 Example (frontend uses `draftRfcQty`/`draftRfcValue` or `approvedRfcQty`/`approvedRfcValue` to show Draft vs Approved view):
@@ -219,8 +221,10 @@ Example (frontend uses `draftRfcQty`/`draftRfcValue` or `approvedRfcQty`/`approv
             "lyValue": 35000.00,
             "draftRfcQty": 250,
             "draftRfcValue": 225000.00,
+            "draftRfcUnitPrice": 900.00,
             "approvedRfcQty": 240,
             "approvedRfcValue": 216000.00,
+            "approvedRfcUnitPrice": 900.00,
             "rejectionReason": null
           },
           {
@@ -230,8 +234,10 @@ Example (frontend uses `draftRfcQty`/`draftRfcValue` or `approvedRfcQty`/`approv
             "lyValue": 35000.00,
             "draftRfcQty": 280,
             "draftRfcValue": 252000.00,
+            "draftRfcUnitPrice": 900.00,
             "approvedRfcQty": 270,
             "approvedRfcValue": 243000.00,
+            "approvedRfcUnitPrice": 900.00,
             "rejectionReason": "Insufficient supporting market data"
           }
         ]
@@ -316,8 +322,8 @@ Models / Raw SQL: Invoice, InvoiceLineItem, ArfRollingForecast, Product
 2. **Service**
    - Compute **last year** date range (same months, year - 1).
    - **LY:** Query invoice_line_items + invoices for account, product_ids, LY date range; aggregate by product and month (SUM ili_quantity, SUM ili_net_price).
-   - **Current year:** Query arf_rolling_forecasts for account, product_ids, current year date range; aggregate **both** draft (arf_draft_quantity, arf_draft_value) and approved (arf_approved_quantity, arf_approved_value) by product and month, so each month has draftRfcQty, draftRfcValue, approvedRfcQty, approvedRfcValue.
-   - Build list of months in range; for each product and month, attach LY, draft RFC, and approved RFC values (use 0 when no data).
+   - **Current year:** Query arf_rolling_forecasts for account, product_ids, current year date range; aggregate **both** draft (arf_draft_quantity, arf_draft_value, MAX(arf_draft_unit_price)) and approved (arf_approved_quantity, arf_approved_value, MAX(arf_approved_unit_price)) by product and month, so each month has draftRfcQty, draftRfcValue, draftRfcUnitPrice, approvedRfcQty, approvedRfcValue, approvedRfcUnitPrice.
+   - Build list of months in range; for each product and month, attach LY, draft RFC, and approved RFC values (use 0 when no data; null for unit price when none).
    - Resolve currency symbol from account (e.g. acc_currency_iso_code) and attach to response.
 
 3. **Data access**
@@ -351,8 +357,8 @@ Relevant for performance:
 - [ ] Implement **both cases**: (1) When user enters from and to, use that range; LY = same months previous year (e.g. Feb–Sep 2026 → LY Feb–Sep 2025). (2) When from/to not received, default = current month through same month next year; LY = that window back one year.
 - [ ] Parse and validate **account_id**, **product_ids** (multiple), **from**, **to**, **view**.
 - [ ] Implement **last year** logic: same month range, previous year; source invoice_line_items (ili_quantity, ili_net_price); filters (Closed, valid, no Credit Note); aggregate by product and month.
-- [ ] Implement **current year** logic: arf_rolling_forecasts; return **both** Draft and Approved (draftRfcQty, draftRfcValue, approvedRfcQty, approvedRfcValue) per product and month.
-- [ ] Build response: list of products, each with list of months and lyQty, lyValue, draftRfcQty, rfcValue (and/or approved fields).
+- [ ] Implement **current year** logic: arf_rolling_forecasts; return **both** Draft and Approved (draftRfcQty, draftRfcValue, draftRfcUnitPrice, approvedRfcQty, approvedRfcValue, approvedRfcUnitPrice) per product and month.
+- [ ] Build response: list of products, each with list of months and lyQty, lyValue, draftRfcQty, draftRfcValue, draftRfcUnitPrice, approvedRfcQty, approvedRfcValue, approvedRfcUnitPrice.
 - [ ] Use 0 (or null) for missing LY or RFC data per product/month.
 - [ ] Add currency symbol from account.
 - [ ] Add error responses (422) for validation.

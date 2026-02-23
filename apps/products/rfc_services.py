@@ -154,15 +154,17 @@ def get_rfc_by_month(
             for row in cursor.fetchall()
         }
 
-    # Current year: arf_rolling_forecasts, draft and approved by product and month; include rejection reason
+    # Current year: arf_rolling_forecasts, draft and approved by product and month; include unit prices and rejection reason
     rfc_query = f"""
         SELECT
             arf.arf_product_id AS product_id,
             TO_CHAR(arf.arf_forecast_date, 'YYYY-MM') AS month_key,
             COALESCE(SUM(arf.arf_draft_quantity), 0) AS draft_qty,
             COALESCE(SUM(arf.arf_draft_value), 0) AS draft_value,
+            MAX(arf.arf_draft_unit_price) AS draft_unit_price,
             COALESCE(SUM(arf.arf_approved_quantity), 0) AS approved_qty,
             COALESCE(SUM(arf.arf_approved_value), 0) AS approved_value,
+            MAX(arf.arf_approved_unit_price) AS approved_unit_price,
             MAX(arf.arf_rejection_reason) AS rejection_reason
         FROM arf_rolling_forecasts arf
         WHERE arf.arf_account_id = %s
@@ -180,9 +182,11 @@ def get_rfc_by_month(
             (row[0], row[1]): {
                 "draftRfcQty": float(row[2]),
                 "draftRfcValue": float(row[3]),
-                "approvedRfcQty": float(row[4]),
-                "approvedRfcValue": float(row[5]),
-                "rejectionReason": row[6] if row[6] else None,
+                "draftRfcUnitPrice": float(row[4]) if row[4] is not None else None,
+                "approvedRfcQty": float(row[5]),
+                "approvedRfcValue": float(row[6]),
+                "approvedRfcUnitPrice": float(row[7]) if row[7] is not None else None,
+                "rejectionReason": row[8] if row[8] else None,
             }
             for row in cursor.fetchall()
         }
@@ -200,8 +204,10 @@ def get_rfc_by_month(
                 {
                     "draftRfcQty": 0.0,
                     "draftRfcValue": 0.0,
+                    "draftRfcUnitPrice": None,
                     "approvedRfcQty": 0.0,
                     "approvedRfcValue": 0.0,
+                    "approvedRfcUnitPrice": None,
                     "rejectionReason": None,
                 },
             )
@@ -212,8 +218,10 @@ def get_rfc_by_month(
                 "lyValue": ly["lyValue"],
                 "draftRfcQty": rfc["draftRfcQty"],
                 "draftRfcValue": rfc["draftRfcValue"],
+                "draftRfcUnitPrice": rfc.get("draftRfcUnitPrice"),
                 "approvedRfcQty": rfc["approvedRfcQty"],
                 "approvedRfcValue": rfc["approvedRfcValue"],
+                "approvedRfcUnitPrice": rfc.get("approvedRfcUnitPrice"),
                 "rejectionReason": rfc.get("rejectionReason"),
             })
         products_out.append({

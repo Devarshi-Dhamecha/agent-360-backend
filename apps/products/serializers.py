@@ -59,15 +59,17 @@ class QuarterlyPerformanceResponseSerializer(serializers.Serializer):
 
 
 class RfcByMonthItemSerializer(serializers.Serializer):
-    """One month: LY + draft + approved + rejection reason."""
+    """One month: LY + draft + approved (qty, value, unit price) + rejection reason."""
     month = serializers.CharField()
     monthLabel = serializers.CharField()
     lyQty = serializers.FloatField()
     lyValue = serializers.FloatField()
     draftRfcQty = serializers.FloatField()
     draftRfcValue = serializers.FloatField()
+    draftRfcUnitPrice = serializers.FloatField(allow_null=True, required=False)
     approvedRfcQty = serializers.FloatField()
     approvedRfcValue = serializers.FloatField()
+    approvedRfcUnitPrice = serializers.FloatField(allow_null=True, required=False)
     rejectionReason = serializers.CharField(allow_null=True, required=False)
 
 
@@ -80,7 +82,7 @@ class RfcByMonthProductSerializer(serializers.Serializer):
 
 @extend_schema_serializer(
     component_name="RfcByMonthResponse",
-    description="RFC by month. Top-level data: accountId, from (start month YYYY-MM), to, currencySymbol, products. Each product has months[] with month, monthLabel, lyQty, lyValue, draftRfcQty, draftRfcValue, approvedRfcQty, approvedRfcValue, rejectionReason. Note: actual JSON uses key 'from' for start month.",
+    description="RFC by month. Top-level data: accountId, from (start month YYYY-MM), to, currencySymbol, products. Each product has months[] with month, monthLabel, lyQty, lyValue, draftRfcQty, draftRfcValue, draftRfcUnitPrice, approvedRfcQty, approvedRfcValue, approvedRfcUnitPrice, rejectionReason. Note: actual JSON uses key 'from' for start month.",
 )
 class RfcByMonthResponseSerializer(serializers.Serializer):
     """RFC by month response wrapper. Actual response data uses key 'from' for start month."""
