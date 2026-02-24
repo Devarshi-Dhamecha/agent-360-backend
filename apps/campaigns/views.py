@@ -1,8 +1,10 @@
 """
 Campaign & Task API views.
 """
+from datetime import datetime, timedelta
 from typing import Dict, List
 
+from django.db.models import Q
 from drf_spectacular.utils import OpenApiParameter, OpenApiTypes, extend_schema
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
@@ -35,6 +37,10 @@ class CampaignListWithTasksAPIView(APIView):
             "Returns campaigns for a given account with mapped tasks.\n\n"
             "- type=all: all tasks mapped to the campaign\n"
             "- type=my: only tasks owned by the given user (user_id required)\n\n"
+            "**Filters:**\n"
+            "- overdue: Campaigns with end_date < today\n"
+            "- next_month: Campaigns with end_date in the next 30 days\n"
+            "- closed: Campaigns with status containing 'Completed' or 'Closed'\n\n"
             "Pagination is optional. If page or page_size parameters are provided, "
             "the response will be paginated. Otherwise, all data is returned."
         ),
@@ -64,6 +70,13 @@ class CampaignListWithTasksAPIView(APIView):
                 description="Filter type: 'all' (default) or 'my'",
             ),
             OpenApiParameter(
+                name="filter",
+                type=OpenApiTypes.STR,
+                location=OpenApiParameter.QUERY,
+                required=False,
+                description="Campaign filter: 'overdue', 'next_month', or 'closed'",
+            ),
+            OpenApiParameter(
                 name='page',
                 type=int,
                 location=OpenApiParameter.QUERY,
@@ -84,6 +97,7 @@ class CampaignListWithTasksAPIView(APIView):
         account_id = (request.query_params.get("account_id") or "").strip()
         user_id = (request.query_params.get("user_id") or "").strip()
         type_param = (request.query_params.get("type") or "all").strip().lower()
+        filter_param = (request.query_params.get("filter") or "").strip().lower()
 
         errors: List[Dict] = []
 
@@ -111,6 +125,14 @@ class CampaignListWithTasksAPIView(APIView):
                 }
             )
 
+        if filter_param and filter_param not in {"overdue", "next_month", "closed"}:
+            errors.append(
+                {
+                    "field": "filter",
+                    "message": "filter must be one of: 'overdue', 'next_month', 'closed'",
+                }
+            )
+
         if errors:
             return ErrorResponse.validation_error(
                 message="Invalid query parameters",
@@ -123,7 +145,30 @@ class CampaignListWithTasksAPIView(APIView):
         ).filter(
             cmp_account_id_id=account_id,
             cmp_active=1,
-        ).order_by("cmp_name")
+        )
+
+        # Apply campaign filters
+        today = datetime.now().date()
+        
+        if filter_param == "overdue":
+            # Campaigns with end_date < today
+            campaigns_qs = campaigns_qs.filter(
+                cmp_end_date__lt=today
+            )
+        elif filter_param == "next_month":
+            # Campaigns with end_date in the next 30 days
+            next_month = today + timedelta(days=30)
+            campaigns_qs = campaigns_qs.filter(
+                cmp_end_date__gte=today,
+                cmp_end_date__lte=next_month
+            )
+        elif filter_param == "closed":
+            # Campaigns with status containing 'Completed' or 'Closed'
+            campaigns_qs = campaigns_qs.filter(
+                Q(cmp_status__icontains='Completed') | Q(cmp_status__icontains='Closed')
+            )
+
+        campaigns_qs = campaigns_qs.order_by("cmp_name")
 
         # Check if pagination parameters are provided
         page_param = request.query_params.get('page')

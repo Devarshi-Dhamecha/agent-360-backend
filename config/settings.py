@@ -19,7 +19,11 @@ DEBUG = os.getenv('DEBUG', 'False') == 'True'
 
 ALLOWED_HOSTS = os.getenv('ALLOWED_HOSTS', 'localhost,127.0.0.1').split(',')
 
-# Application definition
+# Allow all ngrok domains in development
+if DEBUG:
+    ALLOWED_HOSTS.append('.ngrok-free.app')
+    ALLOWED_HOSTS.append('.ngrok.io')
+    ALLOWED_HOSTS.append('.ngrok.app')# Application definition
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -81,11 +85,17 @@ SPECTACULAR_SETTINGS = {
 }
 
 # CORS Configuration
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "http://127.0.0.1:5173",
-    "https://red-coyote-805490.hostingersite.com",
-]
+# Allow ngrok and other origins
+CORS_ALLOWED_ORIGINS = os.getenv(
+    'CORS_ALLOWED_ORIGINS',
+    'http://localhost:5173,http://127.0.0.1:5173,https://red-coyote-805490.hostingersite.com'
+).split(',')
+
+# For development with ngrok, allow all origins
+if DEBUG:
+    CORS_ALLOW_ALL_ORIGINS = True
+else:
+    CORS_ALLOW_ALL_ORIGINS = False
 
 CORS_ALLOW_CREDENTIALS = True
 
@@ -108,6 +118,7 @@ CORS_ALLOW_HEADERS = [
     'user-agent',
     'x-csrftoken',
     'x-requested-with',
+    'ngrok-skip-browser-warning'
 ]
 
 MIDDLEWARE = [

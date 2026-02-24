@@ -27,6 +27,7 @@ Returns campaigns for a given account with their mapped tasks. Supports filterin
 | `account_id`| string | Yes      | -       | Salesforce Account ID (required)                 |
 | `user_id`  | string | No       | -       | Salesforce User ID (required when type='my')     |
 | `type`     | string | No       | all     | Filter type: 'all' or 'my'                       |
+| `filter`   | string | No       | -       | Campaign filter: 'overdue', 'next_month', or 'closed' |
 | `page`     | int    | No       | -       | Page number (if provided, enables pagination)    |
 | `page_size`| int    | No       | -       | Number of items per page (max: 100, if provided, enables pagination) |
 
@@ -34,6 +35,14 @@ Returns campaigns for a given account with their mapped tasks. Supports filterin
 
 - `all` (default): Returns all tasks mapped to each campaign
 - `my`: Returns only tasks owned by the specified user (requires `user_id`)
+
+### Filter Parameter
+
+- `overdue`: Returns campaigns with end_date before today
+- `next_month`: Returns campaigns with end_date within the next 30 days
+- `closed`: Returns campaigns with status containing 'Completed' or 'Closed'
+
+If no filter is specified, all campaigns are returned.
 
 ### Response Fields
 
@@ -76,11 +85,20 @@ curl -s -X GET "http://localhost:8000/api/campaigns/?account_id=001xx000001234AB
 # Get campaigns with only user's tasks (no pagination)
 curl -s -X GET "http://localhost:8000/api/campaigns/?account_id=001xx000001234ABC&type=my&user_id=005xx000001234ABC"
 
+# Get overdue campaigns
+curl -s -X GET "http://localhost:8000/api/campaigns/?account_id=001xx000001234ABC&filter=overdue"
+
+# Get campaigns ending in the next month
+curl -s -X GET "http://localhost:8000/api/campaigns/?account_id=001xx000001234ABC&filter=next_month"
+
+# Get closed campaigns
+curl -s -X GET "http://localhost:8000/api/campaigns/?account_id=001xx000001234ABC&filter=closed"
+
 # Get campaigns with pagination
 curl -s -X GET "http://localhost:8000/api/campaigns/?account_id=001xx000001234ABC&page=1&page_size=10"
 
-# Get campaigns with user filter and pagination
-curl -s -X GET "http://localhost:8000/api/campaigns/?account_id=001xx000001234ABC&type=my&user_id=005xx000001234ABC&page=1"
+# Get overdue campaigns with user filter and pagination
+curl -s -X GET "http://localhost:8000/api/campaigns/?account_id=001xx000001234ABC&type=my&user_id=005xx000001234ABC&filter=overdue&page=1"
 ```
 
 ### Success Response - All Data (200 OK)
@@ -355,6 +373,11 @@ Unexpected server error:
 - The `type` parameter controls task filtering:
   - `all`: Returns all tasks for each campaign
   - `my`: Returns only tasks owned by the specified user (requires `user_id`)
+- The `filter` parameter controls campaign filtering:
+  - `overdue`: Campaigns with end_date < today
+  - `next_month`: Campaigns with end_date within the next 30 days (today to today + 30 days)
+  - `closed`: Campaigns with status containing 'Completed' or 'Closed' (case-insensitive)
+  - If no filter is specified, all campaigns are returned
 - All responses follow the project's standardized format with `success`, `message`, `data`, and optional `meta` or `errors` fields
 - Error responses include `error_code` for programmatic error handling
-- Swagger UI will show `page` and `page_size` as optional input parameters
+- Swagger UI will show `page`, `page_size`, and `filter` as optional input parameters
