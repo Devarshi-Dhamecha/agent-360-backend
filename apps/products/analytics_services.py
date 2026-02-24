@@ -424,9 +424,9 @@ class SalesAnalyticsService:
         from_date: str,
         to_date: str,
         search: str = None
-    ) -> List[Dict]:
+    ) -> Dict:
         """
-        Get all product details for a specific order.
+        Get all product details for a specific order including order information.
         
         Args:
             account_id: Salesforce Account ID
@@ -436,10 +436,18 @@ class SalesAnalyticsService:
             search: Optional search term to filter product names
             
         Returns:
-            List of order line item details
+            Dictionary with order information and list of products
         """
         query = """
         SELECT
+            ord.ord_sf_id AS order_id,
+            ord.ord_order_number AS order_number,
+            ord.ord_status AS order_status,
+            ord.ord_effective_date AS order_effective_date,
+            ord.ord_end_date AS order_end_date,
+            ord.ord_type AS order_type,
+            ord.ord_total_amount AS order_total_amount,
+            ord.ord_currency_iso_code AS order_currency_iso_code,
             ori.ori_product_id AS product_id,
             prd.prd_name AS product_name,
             ori.ori_status AS status,
@@ -461,6 +469,9 @@ class SalesAnalyticsService:
             AND ori.ori_active = 1
             AND prd.prd_active = 1
         GROUP BY
+            ord.ord_sf_id, ord.ord_order_number, ord.ord_status, 
+            ord.ord_effective_date, ord.ord_end_date, ord.ord_type,
+            ord.ord_total_amount, ord.ord_currency_iso_code,
             ori.ori_product_id, prd.prd_name, ori.ori_status
         {search_filter}
         ORDER BY
@@ -482,8 +493,27 @@ class SalesAnalyticsService:
             columns = [col[0] for col in cursor.description]
             results = [dict(zip(columns, row)) for row in cursor.fetchall()]
         
-        return [
-            {
+        # If no results, return None
+        if not results:
+            return None
+        
+        # Extract order information from first row
+        first_row = results[0]
+        order_info = {
+            'orderId': first_row['order_id'],
+            'orderNumber': first_row['order_number'],
+            'orderStatus': first_row['order_status'] or 'Unknown',
+            'orderEffectiveDate': first_row['order_effective_date'],
+            'orderEndDate': first_row['order_end_date'],
+            'orderType': first_row['order_type'],
+            'orderTotalAmount': float(first_row['order_total_amount']) if first_row['order_total_amount'] else None,
+            'orderCurrencyIsoCode': first_row['order_currency_iso_code'],
+            'products': []
+        }
+        
+        # Add all products to the order
+        for row in results:
+            order_info['products'].append({
                 'productId': row['product_id'],
                 'productName': row['product_name'] or 'Unknown',
                 'status': row['status'] or 'Unknown',
@@ -491,6 +521,6 @@ class SalesAnalyticsService:
                 'orderedAmount': float(row['ordered_amount']) if row['ordered_amount'] else 0.0,
                 'openQuantity': float(row['open_quantity']) if row['open_quantity'] else 0.0,
                 'openAmount': float(row['open_amount']) if row['open_amount'] else 0.0,
-            }
-            for row in results
-        ]
+            })
+        
+        return order_info

@@ -564,10 +564,9 @@ class OrderDetailsAPIView(APIView):
     - orderId (required): Order Salesforce ID
     - from (required): Start month in YYYY-MM format
     - to (required): End month in YYYY-MM format
-    - page (optional): Page number (default: 1)
-    - page_size (optional): Items per page (default: 20, max: 100)
+    - search (optional): Search term to filter product names
     
-    Returns all products inside the order with their details.
+    Returns order information with all products inside the order.
     """
     
     permission_classes = [AllowAny]
@@ -576,8 +575,8 @@ class OrderDetailsAPIView(APIView):
         tags=["Sales Analytics"],
         summary="Get order details with all products",
         description=(
-            "Returns all products inside a specific order with their quantities and amounts.\n\n"
-            "**Shows ALL products in the order, not just one.**"
+            "Returns complete order information along with all products inside the order.\n\n"
+            "**Response includes order details at the top level with products as a nested array.**"
         ),
         parameters=[
             OpenApiParameter(
@@ -609,20 +608,6 @@ class OrderDetailsAPIView(APIView):
                 description="End month in YYYY-MM format (e.g., 2025-12)",
             ),
             OpenApiParameter(
-                name="page",
-                type=OpenApiTypes.INT,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="Page number (default: 1)",
-            ),
-            OpenApiParameter(
-                name="page_size",
-                type=OpenApiTypes.INT,
-                location=OpenApiParameter.QUERY,
-                required=False,
-                description="Items per page (default: 20, max: 100)",
-            ),
-            OpenApiParameter(
                 name="search",
                 type=OpenApiTypes.STR,
                 location=OpenApiParameter.QUERY,
@@ -630,7 +615,7 @@ class OrderDetailsAPIView(APIView):
                 description="Search term to filter product names",
             ),
         ],
-        responses={200: OrderDetailsSerializer(many=True)},
+        responses={200: OrderDetailsSerializer()},
     )
     def get(self, request):
         account_id = (request.query_params.get("accountId") or "").strip()
@@ -638,16 +623,6 @@ class OrderDetailsAPIView(APIView):
         from_month = (request.query_params.get("from") or "").strip()
         to_month = (request.query_params.get("to") or "").strip()
         search = (request.query_params.get("search") or "").strip() or None
-        
-        # Pagination parameters
-        try:
-            page = int(request.query_params.get("page", 1))
-            page_size = min(int(request.query_params.get("page_size", 20)), 100)
-        except ValueError:
-            return ErrorResponse.validation_error(
-                message="Invalid pagination parameters",
-                errors=[{"field": "page/page_size", "message": "Must be valid integers"}]
-            )
         
         errors = []
         
@@ -698,22 +673,18 @@ class OrderDetailsAPIView(APIView):
                 )
             
             # Get order details data
-            details_data = SalesAnalyticsService.get_order_details(
+            order_data = SalesAnalyticsService.get_order_details(
                 account_id, order_id, from_date, to_date, search
             )
             
-            # Paginate results
-            paginator = Paginator(details_data, page_size)
-            try:
-                paginated_data = paginator.page(page)
-            except EmptyPage:
-                paginated_data = paginator.page(paginator.num_pages) if paginator.num_pages > 0 else []
+            # Check if order exists
+            if not order_data:
+                return ErrorResponse.not_found(
+                    message="Order not found or no products match the search criteria"
+                )
             
-            return APIResponse.paginated(
-                data=list(paginated_data) if hasattr(paginated_data, '__iter__') else [],
-                page=page,
-                page_size=page_size,
-                total_count=paginator.count,
+            return APIResponse.success(
+                data=order_data,
                 message="Order details retrieved successfully"
             )
             

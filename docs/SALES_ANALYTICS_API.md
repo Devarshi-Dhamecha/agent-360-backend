@@ -419,7 +419,7 @@ GET /api/sales/order-details
 
 ### Description
 
-Shows ALL products inside a specific order with their quantities and amounts.
+Returns complete order information at the top level with all products nested in a products array. This structure provides better readability and avoids repeating order information for each product.
 
 ### Query Parameters
 
@@ -429,11 +429,25 @@ Shows ALL products inside a specific order with their quantities and amounts.
 | orderId | string | Yes | Order Salesforce ID |
 | from | string | Yes | Start month (YYYY-MM) |
 | to | string | Yes | End month (YYYY-MM) |
-| page | integer | No | Page number (default: 1) |
-| page_size | integer | No | Items per page (default: 20, max: 100) |
 | search | string | No | Search term to filter product names (case-insensitive) |
 
 ### Response Fields
+
+#### Order Level Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| orderId | string | Order Salesforce ID |
+| orderNumber | string | Order number |
+| orderStatus | string | Order status |
+| orderEffectiveDate | date | Order effective date (start date) |
+| orderEndDate | date | Order end date (nullable) |
+| orderType | string | Order type (nullable) |
+| orderTotalAmount | decimal | Total order amount (nullable) |
+| orderCurrencyIsoCode | string | Currency ISO code (nullable) |
+| products | array | Array of product line items |
+
+#### Product Line Item Fields (nested in products array)
 
 | Field | Type | Description |
 |-------|------|-------------|
@@ -449,6 +463,14 @@ Shows ALL products inside a specific order with their quantities and amounts.
 
 ```sql
 SELECT
+    ord.ord_sf_id,
+    ord.ord_order_number,
+    ord.ord_status,
+    ord.ord_effective_date,
+    ord.ord_end_date,
+    ord.ord_type,
+    ord.ord_total_amount,
+    ord.ord_currency_iso_code,
     ori.ori_product_id,
     prd.prd_name,
     ori.ori_status,
@@ -466,14 +488,18 @@ WHERE
     AND ord.ord_active = 1
     AND ori.ori_active = 1
     AND prd.prd_active = 1
-GROUP BY ori.ori_product_id, prd.prd_name, ori.ori_status
+GROUP BY 
+    ord.ord_sf_id, ord.ord_order_number, ord.ord_status,
+    ord.ord_effective_date, ord.ord_end_date, ord.ord_type,
+    ord.ord_total_amount, ord.ord_currency_iso_code,
+    ori.ori_product_id, prd.prd_name, ori.ori_status
 ```
 
 ### Example Request
 
 ```bash
 # Basic request
-GET /api/sales/order-details?accountId=0011234567890ABC&orderId=8011234567890ABC&from=2025-01&to=2025-12&page=1&page_size=20
+GET /api/sales/order-details?accountId=0011234567890ABC&orderId=8011234567890ABC&from=2025-01&to=2025-12
 
 # With search filter
 GET /api/sales/order-details?accountId=0011234567890ABC&orderId=8011234567890ABC&from=2025-01&to=2025-12&search=laptop
@@ -485,44 +511,44 @@ GET /api/sales/order-details?accountId=0011234567890ABC&orderId=8011234567890ABC
 {
   "success": true,
   "message": "Order details retrieved successfully",
-  "data": [
-    {
-      "productId": "01t1234567890ABC",
-      "productName": "Laptop Pro 15",
-      "status": "Activated",
-      "orderedQuantity": 10.00,
-      "orderedAmount": 15000.00,
-      "openQuantity": 2.00,
-      "openAmount": 3000.00
-    },
-    {
-      "productId": "01t1234567890GHI",
-      "productName": "Mouse Wireless",
-      "status": "Activated",
-      "orderedQuantity": 50.00,
-      "orderedAmount": 1000.00,
-      "openQuantity": 0.00,
-      "openAmount": 0.00
-    },
-    {
-      "productId": "01t1234567890JKL",
-      "productName": "Keyboard Mechanical",
-      "status": "Activated",
-      "orderedQuantity": 20.00,
-      "orderedAmount": 2000.00,
-      "openQuantity": 5.00,
-      "openAmount": 500.00
-    }
-  ],
-  "meta": {
-    "pagination": {
-      "current_page": 1,
-      "page_size": 20,
-      "total_count": 3,
-      "total_pages": 1,
-      "has_next": false,
-      "has_previous": false
-    }
+  "data": {
+    "orderId": "8011234567890ABC",
+    "orderNumber": "ORD-2025-001",
+    "orderStatus": "Activated",
+    "orderEffectiveDate": "2025-01-15",
+    "orderEndDate": "2025-12-31",
+    "orderType": "Standard",
+    "orderTotalAmount": 18000.00,
+    "orderCurrencyIsoCode": "USD",
+    "products": [
+      {
+        "productId": "01t1234567890ABC",
+        "productName": "Laptop Pro 15",
+        "status": "Activated",
+        "orderedQuantity": 10.00,
+        "orderedAmount": 15000.00,
+        "openQuantity": 2.00,
+        "openAmount": 3000.00
+      },
+      {
+        "productId": "01t1234567890GHI",
+        "productName": "Mouse Wireless",
+        "status": "Activated",
+        "orderedQuantity": 50.00,
+        "orderedAmount": 1000.00,
+        "openQuantity": 0.00,
+        "openAmount": 0.00
+      },
+      {
+        "productId": "01t1234567890JKL",
+        "productName": "Keyboard Mechanical",
+        "status": "Activated",
+        "orderedQuantity": 20.00,
+        "orderedAmount": 2000.00,
+        "openQuantity": 5.00,
+        "openAmount": 500.00
+      }
+    ]
   }
 }
 ```
@@ -692,6 +718,8 @@ params["orderId"] = "8011234567890ABC"
 del params["productId"]
 response = requests.get(f"{base_url}/order-details", params=params)
 details = response.json()
+# Access order info: details['data']['orderId'], details['data']['orderNumber']
+# Access products: details['data']['products']
 
 # Level 4 with search
 params["search"] = "mouse"
@@ -724,7 +752,7 @@ curl -X GET "http://localhost:8000/api/sales/orders?accountId=0011234567890ABC&p
 curl -X GET "http://localhost:8000/api/sales/orders?accountId=0011234567890ABC&productId=01t1234567890ABC&from=2025-01&to=2025-12&search=ORD-2025"
 
 # Level 4: Order Details
-curl -X GET "http://localhost:8000/api/sales/order-details?accountId=0011234567890ABC&orderId=8011234567890ABC&from=2025-01&to=2025-12&page=1&page_size=20"
+curl -X GET "http://localhost:8000/api/sales/order-details?accountId=0011234567890ABC&orderId=8011234567890ABC&from=2025-01&to=2025-12"
 
 # Level 4 with search
 curl -X GET "http://localhost:8000/api/sales/order-details?accountId=0011234567890ABC&orderId=8011234567890ABC&from=2025-01&to=2025-12&search=laptop"
