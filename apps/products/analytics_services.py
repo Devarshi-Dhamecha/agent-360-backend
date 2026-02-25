@@ -53,7 +53,7 @@ class SalesAnalyticsService:
         search: str = None
     ) -> List[Dict]:
         """
-        Get product family level analytics with actuals, last year, and RFC.
+        Get product family level analytics with actuals, last year, open sales, and RFC.
         
         Args:
             account_id: Salesforce Account ID
@@ -74,7 +74,42 @@ class SalesAnalyticsService:
         WITH actuals AS (
             SELECT
                 prd.prd_family AS family,
-                COALESCE(SUM(ori.ori_ordered_amount), 0) AS actual_sales,
+                COALESCE(SUM(ili.ili_net_price), 0) AS actual_sales
+            FROM
+                products prd
+            LEFT JOIN
+                invoice_line_items ili ON ili.ili_product_id = prd.prd_sf_id AND ili.ili_active = 1
+            LEFT JOIN
+                invoices inv ON inv.inv_sf_id = ili.ili_invoice_id
+            WHERE
+                inv.inv_account_id = %s
+                AND inv.inv_invoice_date BETWEEN %s AND %s
+                AND inv.inv_active = 1
+                AND prd.prd_active = 1
+            GROUP BY
+                prd.prd_family
+        ),
+        last_year AS (
+            SELECT
+                prd.prd_family AS family,
+                COALESCE(SUM(ili.ili_net_price), 0) AS last_year_sales
+            FROM
+                products prd
+            LEFT JOIN
+                invoice_line_items ili ON ili.ili_product_id = prd.prd_sf_id AND ili.ili_active = 1
+            LEFT JOIN
+                invoices inv ON inv.inv_sf_id = ili.ili_invoice_id
+            WHERE
+                inv.inv_account_id = %s
+                AND inv.inv_invoice_date BETWEEN %s AND %s
+                AND inv.inv_active = 1
+                AND prd.prd_active = 1
+            GROUP BY
+                prd.prd_family
+        ),
+        open_sales AS (
+            SELECT
+                prd.prd_family AS family,
                 COALESCE(SUM(ori.ori_open_amount), 0) AS open_sales
             FROM
                 products prd
@@ -85,24 +120,7 @@ class SalesAnalyticsService:
             WHERE
                 ord.ord_account_id = %s
                 AND ord.ord_effective_date BETWEEN %s AND %s
-                AND ord.ord_active = 1
-                AND prd.prd_active = 1
-            GROUP BY
-                prd.prd_family
-        ),
-        last_year AS (
-            SELECT
-                prd.prd_family AS family,
-                COALESCE(SUM(ori.ori_ordered_amount), 0) AS last_year_sales
-            FROM
-                products prd
-            LEFT JOIN
-                order_items ori ON ori.ori_product_id = prd.prd_sf_id AND ori.ori_active = 1
-            LEFT JOIN
-                orders ord ON ord.ord_sf_id = ori.ori_order_id
-            WHERE
-                ord.ord_account_id = %s
-                AND ord.ord_effective_date BETWEEN %s AND %s
+                AND ord.ord_status = 'Open'
                 AND ord.ord_active = 1
                 AND prd.prd_active = 1
             GROUP BY
@@ -126,9 +144,9 @@ class SalesAnalyticsService:
                 prd.prd_family
         )
         SELECT
-            COALESCE(a.family, ly.family, r.family) AS family,
+            COALESCE(a.family, ly.family, os.family, r.family) AS family,
             COALESCE(a.actual_sales, 0) AS actual_sales,
-            COALESCE(a.open_sales, 0) AS open_sales,
+            COALESCE(os.open_sales, 0) AS open_sales,
             COALESCE(ly.last_year_sales, 0) AS last_year_sales,
             COALESCE(r.rfc_value, 0) AS rfc,
             CASE
@@ -140,9 +158,11 @@ class SalesAnalyticsService:
         FULL OUTER JOIN
             last_year ly ON a.family = ly.family
         FULL OUTER JOIN
-            rfc r ON COALESCE(a.family, ly.family) = r.family
+            open_sales os ON COALESCE(a.family, ly.family) = os.family
+        FULL OUTER JOIN
+            rfc r ON COALESCE(a.family, ly.family, os.family) = r.family
         WHERE
-            COALESCE(a.family, ly.family, r.family) IS NOT NULL
+            COALESCE(a.family, ly.family, os.family, r.family) IS NOT NULL
             {search_filter}
         ORDER BY
             family
@@ -151,13 +171,14 @@ class SalesAnalyticsService:
         params = [
             account_id, from_date, to_date,
             account_id, ly_from_date, ly_to_date,
+            account_id, from_date, to_date,
             account_id, from_date, to_date
         ]
         
         # Add search filter if provided
         search_filter = ""
         if search:
-            search_filter = "AND LOWER(COALESCE(a.family, ly.family, r.family)) LIKE %s"
+            search_filter = "AND LOWER(COALESCE(a.family, ly.family, os.family, r.family)) LIKE %s"
             params.append(f"%{search.lower()}%")
         
         query = query.format(search_filter=search_filter)
@@ -211,9 +232,48 @@ class SalesAnalyticsService:
         query = """
         WITH actuals AS (
             SELECT
-                ori.ori_product_id AS product_id,
+                ili.ili_product_id AS product_id,
                 prd.prd_name AS product_name,
-                COALESCE(SUM(ori.ori_ordered_amount), 0) AS actual_sales,
+                COALESCE(SUM(ili.ili_net_price), 0) AS actual_sales
+            FROM
+                invoice_line_items ili
+            JOIN
+                invoices inv ON inv.inv_sf_id = ili.ili_invoice_id
+            JOIN
+                products prd ON prd.prd_sf_id = ili.ili_product_id
+            WHERE
+                inv.inv_account_id = %s
+                AND prd.prd_family = %s
+                AND inv.inv_invoice_date BETWEEN %s AND %s
+                AND inv.inv_active = 1
+                AND ili.ili_active = 1
+                AND prd.prd_active = 1
+            GROUP BY
+                ili.ili_product_id, prd.prd_name
+        ),
+        last_year AS (
+            SELECT
+                ili.ili_product_id AS product_id,
+                COALESCE(SUM(ili.ili_net_price), 0) AS last_year_sales
+            FROM
+                invoice_line_items ili
+            JOIN
+                invoices inv ON inv.inv_sf_id = ili.ili_invoice_id
+            JOIN
+                products prd ON prd.prd_sf_id = ili.ili_product_id
+            WHERE
+                inv.inv_account_id = %s
+                AND prd.prd_family = %s
+                AND inv.inv_invoice_date BETWEEN %s AND %s
+                AND inv.inv_active = 1
+                AND ili.ili_active = 1
+                AND prd.prd_active = 1
+            GROUP BY
+                ili.ili_product_id
+        ),
+        open_sales AS (
+            SELECT
+                ori.ori_product_id AS product_id,
                 COALESCE(SUM(ori.ori_open_amount), 0) AS open_sales
             FROM
                 order_items ori
@@ -225,26 +285,7 @@ class SalesAnalyticsService:
                 ord.ord_account_id = %s
                 AND prd.prd_family = %s
                 AND ord.ord_effective_date BETWEEN %s AND %s
-                AND ord.ord_active = 1
-                AND ori.ori_active = 1
-                AND prd.prd_active = 1
-            GROUP BY
-                ori.ori_product_id, prd.prd_name
-        ),
-        last_year AS (
-            SELECT
-                ori.ori_product_id AS product_id,
-                COALESCE(SUM(ori.ori_ordered_amount), 0) AS last_year_sales
-            FROM
-                order_items ori
-            JOIN
-                orders ord ON ord.ord_sf_id = ori.ori_order_id
-            JOIN
-                products prd ON prd.prd_sf_id = ori.ori_product_id
-            WHERE
-                ord.ord_account_id = %s
-                AND prd.prd_family = %s
-                AND ord.ord_effective_date BETWEEN %s AND %s
+                AND ord.ord_status = 'Open'
                 AND ord.ord_active = 1
                 AND ori.ori_active = 1
                 AND prd.prd_active = 1
@@ -270,10 +311,10 @@ class SalesAnalyticsService:
                 arf.arf_product_id
         )
         SELECT
-            COALESCE(a.product_id, ly.product_id, r.product_id) AS product_id,
+            COALESCE(a.product_id, ly.product_id, os.product_id, r.product_id) AS product_id,
             COALESCE(a.product_name, p.prd_name) AS product_name,
             COALESCE(a.actual_sales, 0) AS actual_sales,
-            COALESCE(a.open_sales, 0) AS open_sales,
+            COALESCE(os.open_sales, 0) AS open_sales,
             COALESCE(ly.last_year_sales, 0) AS last_year_sales,
             COALESCE(r.rfc_value, 0) AS rfc,
             CASE
@@ -285,11 +326,13 @@ class SalesAnalyticsService:
         FULL OUTER JOIN
             last_year ly ON a.product_id = ly.product_id
         FULL OUTER JOIN
-            rfc r ON COALESCE(a.product_id, ly.product_id) = r.product_id
+            open_sales os ON COALESCE(a.product_id, ly.product_id) = os.product_id
+        FULL OUTER JOIN
+            rfc r ON COALESCE(a.product_id, ly.product_id, os.product_id) = r.product_id
         LEFT JOIN
-            products p ON COALESCE(a.product_id, ly.product_id, r.product_id) = p.prd_sf_id
+            products p ON COALESCE(a.product_id, ly.product_id, os.product_id, r.product_id) = p.prd_sf_id
         WHERE
-            COALESCE(a.product_id, ly.product_id, r.product_id) IS NOT NULL
+            COALESCE(a.product_id, ly.product_id, os.product_id, r.product_id) IS NOT NULL
             {search_filter}
         ORDER BY
             actual_sales DESC
@@ -298,6 +341,7 @@ class SalesAnalyticsService:
         params = [
             account_id, family, from_date, to_date,
             account_id, family, ly_from_date, ly_to_date,
+            account_id, family, from_date, to_date,
             account_id, family, from_date, to_date
         ]
         

@@ -105,34 +105,51 @@ Provides aggregated sales analytics at the product family level, comparing actua
 | Field | Type | Description |
 |-------|------|-------------|
 | family | string | Product family name |
-| actualSales | decimal | Sum of ordered amounts in current period |
-| openSales | decimal | Sum of open amounts in current period |
-| lastYearSales | decimal | Sum of ordered amounts in same period last year |
+| actualSales | decimal | Sum of invoice net prices in current period |
+| openSales | decimal | Sum of open amounts from orders with status='Open' in current period |
+| lastYearSales | decimal | Sum of invoice net prices in same period last year |
 | rfc | decimal | Sum of approved forecast values |
 | deviationPercent | decimal | ((actualSales - rfc) / rfc) * 100 |
 
 ### Calculation Logic
 
-#### Actuals CTE
+#### Actuals CTE (from Invoices)
 ```sql
 SELECT
     prd.prd_family,
-    SUM(ori.ori_ordered_amount) AS actualSales,
+    SUM(ili.ili_net_price) AS actualSales
+FROM products prd
+LEFT JOIN invoice_line_items ili ON ili.ili_product_id = prd.prd_sf_id
+LEFT JOIN invoices inv ON inv.inv_sf_id = ili.ili_invoice_id
+WHERE
+    inv.inv_account_id = :accountId
+    AND inv.inv_invoice_date BETWEEN :fromDate AND :toDate
+    AND inv.inv_active = 1
+    AND ili.ili_active = 1
+    AND prd.prd_active = 1
+GROUP BY prd.prd_family
+```
+
+#### Last Year CTE (from Invoices)
+Same query with date range shifted back 1 year.
+
+#### Open Sales CTE (from Orders with status='Open')
+```sql
+SELECT
+    prd.prd_family,
     SUM(ori.ori_open_amount) AS openSales
 FROM products prd
-LEFT JOIN order_line_items ori ON ori.ori_product_id = prd.prd_sf_id
+LEFT JOIN order_items ori ON ori.ori_product_id = prd.prd_sf_id
 LEFT JOIN orders ord ON ord.ord_sf_id = ori.ori_order_id
 WHERE
     ord.ord_account_id = :accountId
     AND ord.ord_effective_date BETWEEN :fromDate AND :toDate
+    AND ord.ord_status = 'Open'
     AND ord.ord_active = 1
     AND ori.ori_active = 1
     AND prd.prd_active = 1
 GROUP BY prd.prd_family
 ```
-
-#### Last Year CTE
-Same query with date range shifted back 1 year.
 
 #### RFC CTE
 ```sql
@@ -230,18 +247,18 @@ Provides detailed sales analytics for individual products within a specific prod
 |-------|------|-------------|
 | productId | string | Product Salesforce ID |
 | productName | string | Product name |
-| actualSales | decimal | Sum of ordered amounts in current period |
-| openSales | decimal | Sum of open amounts in current period |
-| lastYearSales | decimal | Sum of ordered amounts in same period last year |
+| actualSales | decimal | Sum of invoice net prices in current period |
+| openSales | decimal | Sum of open amounts from orders with status='Open' in current period |
+| lastYearSales | decimal | Sum of invoice net prices in same period last year |
 | rfc | decimal | Sum of approved forecast values |
 | deviationPercent | decimal | ((actualSales - rfc) / rfc) * 100 |
 
 ### Calculation Logic
 
 Same as Level 1, but:
-- Filtered by `prd.prd_family = :familyName`
-- Grouped by `ori.ori_product_id` and `prd.prd_name`
-- RFC grouped by `arf.arf_product_id`
+- Actuals and Last Year: Filtered by `prd.prd_family = :familyName`, grouped by `ili.ili_product_id` and `prd.prd_name`, using invoice_line_items
+- Open Sales: Filtered by `prd.prd_family = :familyName` and `ord.ord_status = 'Open'`, grouped by `ori.ori_product_id`, using order_items
+- RFC: Filtered by `prd.prd_family = :familyName`, grouped by `arf.arf_product_id`
 
 ### Example Request
 

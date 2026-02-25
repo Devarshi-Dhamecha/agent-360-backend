@@ -40,9 +40,9 @@ class ProductFamilyAnalyticsAPIView(APIView):
             "Returns product family level sales analytics including actual sales, "
             "open sales, last year sales, RFC (forecast), and deviation percentage.\n\n"
             "**Calculation Logic:**\n"
-            "- Actual Sales: SUM(order_items.ori_ordered_amount)\n"
-            "- Open Sales: SUM(order_items.ori_open_amount)\n"
-            "- Last Year Sales: Same calculation for previous year date range\n"
+            "- Actual Sales: SUM(invoice_line_items.ili_net_price) from invoices in the selected period\n"
+            "- Open Sales: SUM(order_items.ori_open_amount) from orders with status='Open' in the selected period\n"
+            "- Last Year Sales: SUM(invoice_line_items.ili_net_price) from invoices in the same period of previous year\n"
             "- RFC: SUM(forecast.arf_approved_value) for approved forecasts\n"
             "- Deviation %: ((actualSales - rfc) / rfc) * 100"
         ),
@@ -208,9 +208,9 @@ class ProductAnalyticsAPIView(APIView):
         description=(
             "Returns product level sales analytics for a specific product family.\n\n"
             "**Calculation Logic:**\n"
-            "- Actual Sales: SUM(order_items.ori_ordered_amount) per product\n"
-            "- Open Sales: SUM(order_items.ori_open_amount) per product\n"
-            "- Last Year Sales: Same calculation for previous year date range\n"
+            "- Actual Sales: SUM(invoice_line_items.ili_net_price) from invoices in the selected period per product\n"
+            "- Open Sales: SUM(order_items.ori_open_amount) from orders with status='Open' in the selected period per product\n"
+            "- Last Year Sales: SUM(invoice_line_items.ili_net_price) from invoices in the same period of previous year per product\n"
             "- RFC: SUM(forecast.arf_approved_value) per product\n"
             "- Deviation %: ((actualSales - rfc) / rfc) * 100"
         ),
