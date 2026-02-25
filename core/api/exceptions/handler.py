@@ -11,6 +11,7 @@ from rest_framework import status
 import logging
 
 from ..responses import ErrorResponse
+from ..constants import ErrorMessages
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +79,7 @@ def custom_exception_handler(exc, context):
             })
         
         return ErrorResponse.validation_error(
-            message="Validation failed",
+            message=ErrorMessages.VALIDATION_FAILED,
             errors=errors
         )
     
@@ -97,7 +98,7 @@ def custom_exception_handler(exc, context):
     # Handle 404 errors
     if isinstance(exc, (Http404, ObjectDoesNotExist)):
         return ErrorResponse.not_found(
-            message=str(exc) if str(exc) else "Resource not found"
+            message=str(exc) if str(exc) else ErrorMessages.RESOURCE_NOT_FOUND
         )
     
     # Handle other DRF exceptions
@@ -122,7 +123,7 @@ def custom_exception_handler(exc, context):
     logger.critical(f"Unhandled exception: {str(exc)}", exc_info=True)
     
     return ErrorResponse.server_error(
-        message="An unexpected error occurred. Please try again later."
+        message=ErrorMessages.INTERNAL_ERROR
     )
 
 

@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 
 from core.api.responses import APIResponse, ErrorResponse
 from core.api.utils.pagination import StandardPagination
+from core.api.constants import ErrorMessages, SuccessMessages, ErrorCodes, FieldNames
 
 from .models import Account
 from .serializers import AccountListSerializer
@@ -53,7 +54,7 @@ class AccountListAPIView(APIView):
         serializer = AccountListSerializer(qs, many=True)
         return APIResponse.success(
             data=serializer.data,
-            message='Data retrieved successfully'
+            message=SuccessMessages.DATA_RETRIEVED
         )
 
 
@@ -83,9 +84,9 @@ class AccountsByUserAPIView(APIView):
         # Validate user_id is provided
         if not user_id or not user_id.strip():
             return ErrorResponse.bad_request(
-                message="User ID is required",
-                errors=[{"field": "user_id", "message": "User ID cannot be empty"}],
-                error_code="REQUIRED_FIELD_MISSING"
+                message=ErrorMessages.USER_ID_REQUIRED,
+                errors=[{"field": FieldNames.USER_ID, "message": ErrorMessages.USER_ID_EMPTY}],
+                error_code=ErrorCodes.REQUIRED_FIELD_MISSING
             )
 
         user_id = user_id.strip()
@@ -108,5 +109,5 @@ class AccountsByUserAPIView(APIView):
         serializer = AccountListSerializer(qs, many=True)
         return APIResponse.success(
             data=serializer.data,
-            message='Data retrieved successfully'
+            message=SuccessMessages.DATA_RETRIEVED
         )

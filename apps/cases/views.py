@@ -12,6 +12,9 @@ from rest_framework import status
 
 from core.api.responses import APIResponse
 from core.api.utils.pagination import StandardPagination
+from core.api.constants import (
+    ErrorMessages, SuccessMessages, ErrorCodes, FieldNames, ValidationConstants
+)
 
 from .models import Case, CaseComment, CaseHistory
 from .serializers import (
@@ -25,7 +28,7 @@ from .serializers import (
 )
 
 # Query param validation
-STATUS_CHOICES = ('open', 'closed', 'all')
+STATUS_CHOICES = ValidationConstants.STATUS_CHOICES
 ORDERING_MAP = {
     'opened_at': 'cs_sf_created_date',
     '-opened_at': '-cs_sf_created_date',
@@ -39,10 +42,9 @@ def _parse_date(value, param_name):
     if not value:
         return None
     try:
-        return datetime.strptime(value.strip(), '%Y-%m-%d').date()
+        return datetime.strptime(value.strip(), ValidationConstants.DATE_FORMAT).date()
     except ValueError:
-        raise ValidationError({param_name: ['Invalid date. Use YYYY-MM-DD.']})
-
+        raise ValidationError({param_name: [ErrorMessages.DATE_FORMAT_INVALID]})
 
 def _cases_queryset_with_counts():
     """Base Case queryset with comments_count and timeline_count annotations."""
@@ -85,7 +87,7 @@ class CaseSummaryAPIView(APIView):
     def get(self, request):
         account_id = (request.query_params.get('account_id') or '').strip()
         if not account_id:
-            raise ValidationError({'account_id': ['This query parameter is required.']})
+            raise ValidationError({'account_id': [ErrorMessages.QUERY_PARAM_REQUIRED]})
 
         opened_from = request.query_params.get('opened_from') or ''
         opened_to = request.query_params.get('opened_to') or ''
@@ -114,7 +116,7 @@ class CaseSummaryAPIView(APIView):
         serializer = CaseSummarySerializer(data)
         return APIResponse.success(
             data=serializer.data,
-            message='Summary retrieved successfully',
+            message=SuccessMessages.SUMMARY_RETRIEVED,
         )
 
 
@@ -195,14 +197,15 @@ class CaseListAPIView(APIView):
 
         if status_filter not in STATUS_CHOICES:
             raise ValidationError({
-                'status': [f'Invalid status. Allowed: {", ".join(STATUS_CHOICES)}'],
+                'status': [ErrorMessages.INVALID_STATUS.format(allowed=", ".join(STATUS_CHOICES))],
             })
         order_field = ORDERING_MAP.get(ordering_param)
         if not order_field:
             raise ValidationError({
                 'ordering': [
-                    'Invalid ordering. Allowed: opened_at, -opened_at, '
-                    'last_modified, -last_modified',
+                    ErrorMessages.INVALID_ORDERING.format(
+                        allowed='opened_at, -opened_at, last_modified, -last_modified'
+                    )
                 ],
             })
 
@@ -244,7 +247,7 @@ class CaseListAPIView(APIView):
         serializer = CaseListSerializer(qs, many=True)
         return APIResponse.success(
             data=serializer.data,
-            message='Data retrieved successfully'
+            message=SuccessMessages.DATA_RETRIEVED
         )
 
 
@@ -258,11 +261,11 @@ class CaseDetailAPIView(APIView):
             case = qs.get(cs_sf_id=case_id)
         except Case.DoesNotExist:
             from rest_framework.exceptions import NotFound
-            raise NotFound('Case not found.')
+            raise NotFound(ErrorMessages.CASE_NOT_FOUND)
         serializer = CaseDetailSerializer(case)
         return APIResponse.success(
             data=serializer.data,
-            message='Case retrieved successfully',
+            message=SuccessMessages.CASE_RETRIEVED,
         )
 
 
@@ -299,7 +302,7 @@ class CaseCommentsAPIView(APIView):
             Case.objects.get(cs_sf_id=case_id)
         except Case.DoesNotExist:
             from rest_framework.exceptions import NotFound
-            raise NotFound('Case not found.')
+            raise NotFound(ErrorMessages.CASE_NOT_FOUND)
 
         comments = (
             CaseComment.objects.filter(cc_case_id_id=case_id)
@@ -309,7 +312,7 @@ class CaseCommentsAPIView(APIView):
         serializer = CaseCommentSerializer(comments, many=True)
         return APIResponse.success(
             data=serializer.data,
-            message='Comments retrieved successfully',
+            message=SuccessMessages.COMMENTS_RETRIEVED,
         )
 
     def post(self, request, case_id):
@@ -319,7 +322,7 @@ class CaseCommentsAPIView(APIView):
             case = Case.objects.get(cs_sf_id=case_id)
         except Case.DoesNotExist:
             from rest_framework.exceptions import NotFound
-            raise NotFound('Case not found.')
+            raise NotFound(ErrorMessages.CASE_NOT_FOUND)
 
         # Validate input
         input_serializer = CreateCaseCommentSerializer(data=request.data)
@@ -349,7 +352,7 @@ class CaseCommentsAPIView(APIView):
         output_serializer = CaseCommentResponseSerializer(comment)
         return APIResponse.created(
             data=output_serializer.data,
-            message='Comment created successfully',
+            message=SuccessMessages.COMMENT_CREATED,
             resource_id=str(comment.cc_id),
         )
 
@@ -363,7 +366,7 @@ class CaseTimelineAPIView(APIView):
             Case.objects.get(cs_sf_id=case_id)
         except Case.DoesNotExist:
             from rest_framework.exceptions import NotFound
-            raise NotFound('Case not found.')
+            raise NotFound(ErrorMessages.CASE_NOT_FOUND)
 
         events = (
             CaseHistory.objects.filter(ch_case_id_id=case_id)
@@ -373,5 +376,5 @@ class CaseTimelineAPIView(APIView):
         serializer = CaseTimelineSerializer(events, many=True)
         return APIResponse.success(
             data=serializer.data,
-            message='Timeline retrieved successfully',
+            message=SuccessMessages.TIMELINE_RETRIEVED,
         )

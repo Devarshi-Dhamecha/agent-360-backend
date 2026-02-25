@@ -12,6 +12,9 @@ from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 
 from core.api.responses import APIResponse, ErrorResponse
+from core.api.constants import (
+    ErrorMessages, SuccessMessages, ErrorCodes, FieldNames, ValidationConstants
+)
 
 from .serializers import (
     ProductPerformanceResponseSerializer,
@@ -77,31 +80,31 @@ class QuarterlyPerformanceAPIView(APIView):
 
         if not account_id:
             return ErrorResponse.validation_error(
-                message="Invalid query parameters",
-                errors=[{"field": "account_id", "message": "account_id is required"}],
+                message=ErrorMessages.INVALID_QUERY_PARAMS,
+                errors=[{"field": FieldNames.ACCOUNT_ID, "message": ErrorMessages.ACCOUNT_ID_REQUIRED}],
             )
         if year_param is None or year_param == "":
             return ErrorResponse.validation_error(
-                message="Invalid query parameters",
-                errors=[{"field": "year", "message": "year is required"}],
+                message=ErrorMessages.INVALID_QUERY_PARAMS,
+                errors=[{"field": FieldNames.YEAR, "message": ErrorMessages.YEAR_REQUIRED}],
             )
         try:
             year = int(year_param)
         except (ValueError, TypeError):
             return ErrorResponse.validation_error(
-                message="Invalid query parameters",
-                errors=[{"field": "year", "message": "year must be an integer (e.g. 2026)"}],
+                message=ErrorMessages.INVALID_QUERY_PARAMS,
+                errors=[{"field": FieldNames.YEAR, "message": ErrorMessages.YEAR_INVALID_FORMAT}],
             )
-        if year < 2000 or year > 2100:
+        if year < ValidationConstants.MIN_YEAR or year > ValidationConstants.MAX_YEAR:
             return ErrorResponse.validation_error(
-                message="Invalid query parameters",
-                errors=[{"field": "year", "message": "year must be between 2000 and 2100"}],
+                message=ErrorMessages.INVALID_QUERY_PARAMS,
+                errors=[{"field": FieldNames.YEAR, "message": ErrorMessages.YEAR_OUT_OF_RANGE}],
             )
 
         data = get_quarterly_performance(account_id, year)
         return APIResponse.success(
             data=data,
-            message="Achieved (by quarter or year) retrieved successfully",
+            message=SuccessMessages.QUARTERLY_PERFORMANCE_RETRIEVED,
         )
 
 
@@ -164,18 +167,18 @@ class ProductDeviationPerformanceAPIView(APIView):
 
         if not account_id:
             return ErrorResponse.validation_error(
-                message="Invalid query parameters",
-                errors=[{"field": "account_id", "message": "account_id is required"}],
+                message=ErrorMessages.INVALID_QUERY_PARAMS,
+                errors=[{"field": FieldNames.ACCOUNT_ID, "message": ErrorMessages.ACCOUNT_ID_REQUIRED}],
             )
         if not from_month:
             return ErrorResponse.validation_error(
-                message="Invalid query parameters",
-                errors=[{"field": "from", "message": "from (YYYY-MM) is required"}],
+                message=ErrorMessages.INVALID_QUERY_PARAMS,
+                errors=[{"field": FieldNames.FROM, "message": ErrorMessages.FROM_MONTH_REQUIRED}],
             )
         if not to_month:
             return ErrorResponse.validation_error(
-                message="Invalid query parameters",
-                errors=[{"field": "to", "message": "to (YYYY-MM) is required"}],
+                message=ErrorMessages.INVALID_QUERY_PARAMS,
+                errors=[{"field": FieldNames.TO, "message": ErrorMessages.TO_MONTH_REQUIRED}],
             )
 
         try:
@@ -184,25 +187,25 @@ class ProductDeviationPerformanceAPIView(APIView):
             )
             if from_date > to_date:
                 return ErrorResponse.validation_error(
-                    message="Invalid date range",
-                    errors=[{"field": "to", "message": "End date must be >= start date"}],
+                    message=ErrorMessages.INVALID_DATE_RANGE,
+                    errors=[{"field": FieldNames.TO, "message": ErrorMessages.END_DATE_BEFORE_START}],
                 )
             performance_data = ProductPerformanceService.get_product_performance(
                 from_date, to_date, account_id
             )
             return APIResponse.success(
                 data=performance_data,
-                message="Product performance data retrieved successfully",
+                message=SuccessMessages.PRODUCT_PERFORMANCE_RETRIEVED,
             )
         except ValueError as e:
             return ErrorResponse.validation_error(
-                message="Invalid date format",
-                errors=[{"field": "from/to", "message": str(e)}],
+                message=ErrorMessages.INVALID_DATE_FORMAT,
+                errors=[{"field": FieldNames.FROM_TO, "message": str(e)}],
             )
         except Exception as e:
             return ErrorResponse.server_error(
                 message="An error occurred while retrieving product performance data",
-                error_code="PERFORMANCE_CALCULATION_ERROR",
+                error_code=ErrorCodes.PERFORMANCE_CALCULATION_ERROR,
             )
 
 
@@ -342,20 +345,20 @@ class RfcByMonthAPIView(APIView):
 
         if not account_id:
             return ErrorResponse.validation_error(
-                message="Invalid query parameters",
-                errors=[{"field": "account_id", "message": "account_id is required"}],
+                message=ErrorMessages.INVALID_QUERY_PARAMS,
+                errors=[{"field": FieldNames.ACCOUNT_ID, "message": ErrorMessages.ACCOUNT_ID_REQUIRED}],
             )
         if not product_ids_raw:
             return ErrorResponse.validation_error(
-                message="Invalid query parameters",
-                errors=[{"field": "product_ids", "message": "At least one product_id is required"}],
+                message=ErrorMessages.INVALID_QUERY_PARAMS,
+                errors=[{"field": FieldNames.PRODUCT_IDS, "message": ErrorMessages.PRODUCT_IDS_REQUIRED}],
             )
 
         product_ids = [p.strip() for p in product_ids_raw.split(",") if p.strip()]
         if not product_ids:
             return ErrorResponse.validation_error(
-                message="Invalid query parameters",
-                errors=[{"field": "product_ids", "message": "At least one product_id is required"}],
+                message=ErrorMessages.INVALID_QUERY_PARAMS,
+                errors=[{"field": FieldNames.PRODUCT_IDS, "message": ErrorMessages.PRODUCT_IDS_REQUIRED}],
             )
 
         if from_month and to_month:
@@ -363,13 +366,13 @@ class RfcByMonthAPIView(APIView):
                 from_date, to_date = rfc_services._parse_dates(from_month, to_month)
                 if from_date > to_date:
                     return ErrorResponse.validation_error(
-                        message="Invalid date range",
-                        errors=[{"field": "to", "message": "End month must be on or after start month"}],
+                        message=ErrorMessages.INVALID_DATE_RANGE,
+                        errors=[{"field": FieldNames.TO, "message": ErrorMessages.END_MONTH_BEFORE_START}],
                     )
             except (ValueError, IndexError) as e:
                 return ErrorResponse.validation_error(
-                    message="Invalid date format",
-                    errors=[{"field": "from/to", "message": "Must be YYYY-MM"}],
+                    message=ErrorMessages.INVALID_DATE_FORMAT,
+                    errors=[{"field": FieldNames.FROM_TO, "message": ErrorMessages.MONTH_FORMAT_INVALID}],
                 )
         else:
             from_date, to_date = rfc_services._default_month_range()
@@ -382,7 +385,7 @@ class RfcByMonthAPIView(APIView):
         )
         return APIResponse.success(
             data=data,
-            message="RFC by month retrieved successfully",
+            message=SuccessMessages.RFC_BY_MONTH_RETRIEVED,
         )
 
 
@@ -475,8 +478,8 @@ class UpdateRfcAPIView(APIView):
     def patch(self, request):
         if not request.data or not isinstance(request.data, dict):
             return ErrorResponse.bad_request(
-                message="Invalid request body",
-                errors=[{"field": "body", "message": "JSON body with accountId and updates is required"}],
+                message=ErrorMessages.INVALID_REQUEST_BODY,
+                errors=[{"field": FieldNames.BODY, "message": ErrorMessages.JSON_BODY_REQUIRED}],
             )
 
         account_id = (request.data.get("accountId") or "").strip()
@@ -484,36 +487,36 @@ class UpdateRfcAPIView(APIView):
 
         if not account_id:
             return ErrorResponse.validation_error(
-                message="Validation failed",
-                errors=[{"field": "accountId", "message": "accountId is required"}],
+                message=ErrorMessages.VALIDATION_FAILED,
+                errors=[{"field": "accountId", "message": ErrorMessages.ACCOUNT_ID_REQUIRED_BODY}],
             )
         if not isinstance(updates_raw, list) or len(updates_raw) == 0:
             return ErrorResponse.validation_error(
-                message="Validation failed",
-                errors=[{"field": "updates", "message": "updates must be a non-empty array"}],
+                message=ErrorMessages.VALIDATION_FAILED,
+                errors=[{"field": FieldNames.UPDATES, "message": ErrorMessages.UPDATES_REQUIRED}],
             )
 
-        MAX_UPDATES = 100
+        MAX_UPDATES = ValidationConstants.MAX_RFC_UPDATES
         if len(updates_raw) > MAX_UPDATES:
             return ErrorResponse.validation_error(
-                message="Validation failed",
-                errors=[{"field": "updates", "message": f"At most {MAX_UPDATES} items allowed per request"}],
+                message=ErrorMessages.VALIDATION_FAILED,
+                errors=[{"field": FieldNames.UPDATES, "message": ErrorMessages.UPDATES_MAX_EXCEEDED.format(max=MAX_UPDATES)}],
             )
 
         seen = set()
         for i, item in enumerate(updates_raw):
             if not isinstance(item, dict):
                 return ErrorResponse.validation_error(
-                    message="Validation failed",
-                    errors=[{"field": f"updates[{i}]", "message": "Each item must have productId, month, draftRfcQty"}],
+                    message=ErrorMessages.VALIDATION_FAILED,
+                    errors=[{"field": f"updates[{i}]", "message": ErrorMessages.UPDATES_INVALID_ITEM}],
                 )
             pid = (item.get("productId") or "").strip()
             mon = (item.get("month") or "").strip()
             key = (pid, mon)
             if key in seen:
                 return ErrorResponse.validation_error(
-                    message="Validation failed",
-                    errors=[{"field": "updates", "message": "Duplicate productId and month in updates"}],
+                    message=ErrorMessages.VALIDATION_FAILED,
+                    errors=[{"field": FieldNames.UPDATES, "message": ErrorMessages.UPDATES_DUPLICATE}],
                 )
             seen.add(key)
 
@@ -521,7 +524,7 @@ class UpdateRfcAPIView(APIView):
 
         if not Account.objects.filter(acc_sf_id=account_id).exists():
             return ErrorResponse.not_found(
-                message="Account not found",
+                message=ErrorMessages.ACCOUNT_NOT_FOUND,
                 resource_type="Account",
             )
 
@@ -533,10 +536,10 @@ class UpdateRfcAPIView(APIView):
         missing = set(product_ids) - existing_products
         if missing:
             return ErrorResponse.validation_error(
-                message="Validation failed",
-                errors=[{"field": "productId", "message": f"Product(s) not found: {', '.join(sorted(missing))}"}],
+                message=ErrorMessages.VALIDATION_FAILED,
+                errors=[{"field": FieldNames.PRODUCT_ID, "message": ErrorMessages.PRODUCTS_NOT_FOUND.format(products=', '.join(sorted(missing)))}],
             )
 
         modified_by = request.user if getattr(request.user, "is_authenticated", False) else None
         data = rfc_services.update_rfc(account_id=account_id, updates=updates_raw, modified_by_user=modified_by)
-        return APIResponse.success(data=data, message="RFC updated successfully")
+        return APIResponse.success(data=data, message=SuccessMessages.RFC_UPDATED)

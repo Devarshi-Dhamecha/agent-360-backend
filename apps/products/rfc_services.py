@@ -364,15 +364,14 @@ def update_rfc(
 
         row.arf_draft_quantity = qty_decimal
         row.arf_draft_value = draft_value
-        row.arf_agent_modified_by_id = modified_by_id
+        if modified_by_id:
+            row.arf_agent_modified_by_id = modified_by_id
         row.arf_agent_modified_date = modified_at
-        row.arf_last_modified_by_id = modified_by_id or row.arf_last_modified_by_id or ""
         row.save(update_fields=[
             "arf_draft_quantity",
             "arf_draft_value",
             "arf_agent_modified_by_id",
             "arf_agent_modified_date",
-            "arf_last_modified_by_id",
             "arf_updated_at",
         ])
 

@@ -8,6 +8,8 @@ from django.core.validators import validate_email as django_validate_email
 from django.core.exceptions import ValidationError as DjangoValidationError
 import re
 
+from core.api.constants import ErrorMessages
+
 
 def validate_salesforce_id(value):
     """
@@ -47,7 +49,7 @@ def validate_email(value):
     try:
         django_validate_email(value)
     except DjangoValidationError:
-        raise serializers.ValidationError("Invalid email address")
+        raise serializers.ValidationError(ErrorMessages.INVALID_EMAIL)
     return value
 
 
@@ -175,7 +177,7 @@ def validate_status_transition(current_status, new_status, allowed_transitions):
         return True
     
     if current_status not in allowed_transitions:
-        raise serializers.ValidationError(f"Invalid current status: {current_status}")
+        raise serializers.ValidationError(ErrorMessages.INVALID_STATUS.format(allowed=current_status))
     
     if new_status not in allowed_transitions[current_status]:
         raise serializers.ValidationError(
