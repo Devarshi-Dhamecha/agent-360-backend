@@ -348,3 +348,162 @@ class CaseCommentsAndTimelineAPITests(TestCase):
     def test_timeline_not_found_returns_404(self):
         response = self.client.get('/api/complaints-cases/nonexistent_xyz/timeline/')
         self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+
+
+class CreateCaseCommentAPITests(TestCase):
+    """POST /api/complaints-cases/{case_id}/comments - create new comment."""
+
+    def setUp(self):
+        self.client = APIClient()
+        self.user = User.objects.create(
+            usr_sf_id='usr001',
+            usr_username='testuser',
+            usr_email='test@example.com',
+            usr_last_name='User',
+            usr_first_name='Test',
+            usr_name='Test User',
+            usr_is_active=True,
+            usr_time_zone='UTC',
+            usr_language='en',
+            usr_sf_created_date=_dt(2020, 1, 1),
+            usr_last_modified_date=_dt(2020, 1, 1),
+            usr_last_modified_by_id='usr001',
+        )
+        self.account = Account.objects.create(
+            acc_sf_id='acc001',
+            acc_name='Test Account',
+            acc_owner_id=self.user,
+            acc_last_modified_date=_dt(2020, 1, 1),
+            acc_last_modified_by_id='usr001',
+        )
+        self.case = Case.objects.create(
+            cs_sf_id='case_comment_1',
+            cs_case_number='00005001',
+            cs_subject='Case for comment creation',
+            cs_status='Open',
+            cs_account_id=self.account,
+            cs_owner_id=self.user,
+            cs_sf_created_date=_dt(2024, 5, 1),
+            cs_last_modified_date=_dt(2024, 5, 1),
+            cs_last_modified_by_id='usr001',
+        )
+
+    def test_create_comment_success(self):
+        payload = {
+            'comment_body': 'This is a new comment from Agent360',
+            'is_published': True,
+            'created_by_id': self.user.usr_sf_id,
+        }
+        response = self.client.post(
+            f'/api/complaints-cases/{self.case.cs_sf_id}/comments/',
+            data=payload,
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        data = response.json()
+        self.assertTrue(data.get('success'))
+        self.assertEqual(data['message'], 'Comment created successfully')
+        self.assertIn('data', data)
+        self.assertIn('comment_id', data['data'])
+        self.assertEqual(data['data']['body'], 'This is a new comment from Agent360')
+        self.assertEqual(data['data']['is_published'], True)
+        self.assertEqual(data['data']['created_by_id'], self.user.usr_sf_id)
+        self.assertIn('created_by_name', data['data'])
+        self.assertIn('meta', data)
+        self.assertIn('resource_id', data['meta'])
+
+        # Verify comment was created in database
+        comment = CaseComment.objects.get(cc_id=data['data']['comment_id'])
+        self.assertEqual(comment.cc_comment_body, 'This is a new comment from Agent360')
+        self.assertEqual(comment.cc_is_published, True)
+        self.assertEqual(comment.cc_agent_created_by_id, self.user.usr_sf_id)
+        self.assertEqual(comment.cc_agent360_source, True)
+        self.assertEqual(comment.cc_sync_status, 0)
+        self.assertIsNone(comment.cc_sf_id)
+
+    def test_create_comment_default_is_published(self):
+        payload = {
+            'comment_body': 'Comment without is_published',
+            'created_by_id': self.user.usr_sf_id,
+        }
+        response = self.client.post(
+            f'/api/complaints-cases/{self.case.cs_sf_id}/comments/',
+            data=payload,
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_201_CREATED)
+        data = response.json()
+        self.assertEqual(data['data']['is_published'], True)
+
+    def test_create_comment_missing_comment_body(self):
+        payload = {
+            'is_published': True,
+            'created_by_id': self.user.usr_sf_id,
+        }
+        response = self.client.post(
+            f'/api/complaints-cases/{self.case.cs_sf_id}/comments/',
+            data=payload,
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY)
+        data = response.json()
+        self.assertFalse(data.get('success'))
+        errors = data.get('errors', [])
+        self.assertTrue(any(e.get('field') == 'comment_body' for e in errors))
+
+    def test_create_comment_blank_comment_body(self):
+        payload = {
+            'comment_body': '   ',
+            'created_by_id': self.user.usr_sf_id,
+        }
+        response = self.client.post(
+            f'/api/complaints-cases/{self.case.cs_sf_id}/comments/',
+            data=payload,
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY)
+        data = response.json()
+        self.assertFalse(data.get('success'))
+
+    def test_create_comment_missing_created_by_id(self):
+        payload = {
+            'comment_body': 'Comment without creator',
+        }
+        response = self.client.post(
+            f'/api/complaints-cases/{self.case.cs_sf_id}/comments/',
+            data=payload,
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY)
+        data = response.json()
+        self.assertFalse(data.get('success'))
+        errors = data.get('errors', [])
+        self.assertTrue(any(e.get('field') == 'created_by_id' for e in errors))
+
+    def test_create_comment_invalid_user_id(self):
+        payload = {
+            'comment_body': 'Comment with invalid user',
+            'created_by_id': 'nonexistent_user_id',
+        }
+        response = self.client.post(
+            f'/api/complaints-cases/{self.case.cs_sf_id}/comments/',
+            data=payload,
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_422_UNPROCESSABLE_ENTITY)
+        data = response.json()
+        self.assertFalse(data.get('success'))
+
+    def test_create_comment_case_not_found(self):
+        payload = {
+            'comment_body': 'Comment for nonexistent case',
+            'created_by_id': self.user.usr_sf_id,
+        }
+        response = self.client.post(
+            '/api/complaints-cases/nonexistent_case_id/comments/',
+            data=payload,
+            content_type='application/json',
+        )
+        self.assertEqual(response.status_code, status.HTTP_404_NOT_FOUND)
+        data = response.json()
+        self.assertFalse(data.get('success'))

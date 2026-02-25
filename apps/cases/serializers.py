@@ -142,10 +142,15 @@ class CaseCommentSerializer(serializers.ModelSerializer):
         return dt.isoformat()
 
     def get_created_by_id(self, obj):
+        # Prioritize Agent360 creator, fallback to SF creator
+        if hasattr(obj, 'cc_agent_created_by_id') and obj.cc_agent_created_by_id:
+            return obj.cc_agent_created_by_id
         return obj.cc_sf_created_by_id_id if hasattr(obj, 'cc_sf_created_by_id_id') else None
 
     def get_created_by_name(self, obj):
-        return _user_display_name(getattr(obj, 'cc_sf_created_by_id', None))
+        # Prioritize Agent360 creator, fallback to SF creator
+        user = getattr(obj, 'cc_agent_created_by', None) or getattr(obj, 'cc_sf_created_by_id', None)
+        return _user_display_name(user)
 
 
 class CaseTimelineSerializer(serializers.ModelSerializer):
@@ -178,3 +183,71 @@ class CaseTimelineSerializer(serializers.ModelSerializer):
 
     def get_created_by_name(self, obj):
         return _user_display_name(getattr(obj, 'ch_created_by_id', None))
+
+
+class CreateCaseCommentSerializer(serializers.Serializer):
+    """Input serializer for creating a case comment."""
+    comment_body = serializers.CharField(
+        required=True,
+        allow_blank=False,
+        error_messages={
+            'required': 'Comment body is required.',
+            'blank': 'Comment body cannot be blank.',
+        }
+    )
+    is_published = serializers.BooleanField(
+        required=False,
+        default=True,
+    )
+    created_by_id = serializers.CharField(
+        required=True,
+        max_length=18,
+        error_messages={
+            'required': 'Created by user ID is required.',
+        }
+    )
+
+    def validate_comment_body(self, value):
+        """Validate comment body is not empty after stripping."""
+        if not value.strip():
+            raise serializers.ValidationError('Comment body cannot be blank.')
+        return value.strip()
+
+    def validate_created_by_id(self, value):
+        """Validate that the user exists."""
+        from apps.users.models import User
+        value = value.strip()
+        if not User.objects.filter(usr_sf_id=value).exists():
+            raise serializers.ValidationError(f'User with ID {value} does not exist.')
+        return value
+
+
+class CaseCommentResponseSerializer(serializers.ModelSerializer):
+    """Response serializer for created case comment."""
+    comment_id = serializers.IntegerField(source='cc_id', read_only=True)
+    body = serializers.CharField(source='cc_comment_body', read_only=True)
+    is_published = serializers.BooleanField(source='cc_is_published', read_only=True)
+    created_at = serializers.SerializerMethodField()
+    created_by_id = serializers.SerializerMethodField()
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = CaseComment
+        fields = [
+            'comment_id', 'body', 'is_published',
+            'created_at', 'created_by_id', 'created_by_name',
+        ]
+
+    def get_created_at(self, obj):
+        dt = obj.cc_agent_created_date or obj.cc_created_at
+        if not dt:
+            return None
+        if timezone.is_naive(dt):
+            return timezone.make_aware(dt).isoformat()
+        return dt.isoformat()
+
+    def get_created_by_id(self, obj):
+        return obj.cc_agent_created_by_id if hasattr(obj, 'cc_agent_created_by_id') else None
+
+    def get_created_by_name(self, obj):
+        return _user_display_name(getattr(obj, 'cc_agent_created_by', None))

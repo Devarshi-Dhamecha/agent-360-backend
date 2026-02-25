@@ -13,6 +13,7 @@ Auth: `AllowAny` (no authentication required).
 | GET | `/api/complaints-cases/` | List cases with filters, pagination, and per-case comment/history counts |
 | GET | `/api/complaints-cases/{case_id}/` | Case detail with counts |
 | GET | `/api/complaints-cases/{case_id}/comments/` | Comments for case (latest first) |
+| POST | `/api/complaints-cases/{case_id}/comments/` | Create a new comment for case |
 | GET | `/api/complaints-cases/{case_id}/timeline/` | Timeline (case history) for case (latest first) |
 
 ---
@@ -237,6 +238,89 @@ Returns comments **latest first**.
 ```bash
 curl -s -X GET "http://localhost:8000/api/complaints-cases/500xx000001234ABC/comments/"
 ```
+
+---
+
+**POST** `/api/complaints-cases/{case_id}/comments/`
+
+Creates a new comment for the specified case. The comment will be created in Agent360 with `cc_sync_status = 0` (pending sync to Salesforce).
+
+**Request Body:**
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `comment_body` | string | Yes | The comment text (cannot be blank) |
+| `is_published` | boolean | No | Whether the comment is published (default: true) |
+| `created_by_id` | string | Yes | Salesforce User ID of the creator (must exist in users table) |
+
+**Request Example:**
+```json
+{
+  "comment_body": "This is a new comment from Agent360",
+  "is_published": true,
+  "created_by_id": "005xx000001234ABC"
+}
+```
+
+**Response (201):**
+```json
+{
+  "success": true,
+  "message": "Comment created successfully",
+  "data": {
+    "comment_id": 123,
+    "body": "This is a new comment from Agent360",
+    "is_published": true,
+    "created_at": "2024-02-16T14:30:00.000000Z",
+    "created_by_id": "005xx000001234ABC",
+    "created_by_name": "John Doe"
+  },
+  "meta": {
+    "resource_id": "123"
+  }
+}
+```
+
+**Error Responses:**
+
+**400** - Validation error:
+```json
+{
+  "success": false,
+  "message": "Validation failed",
+  "errors": {
+    "comment_body": ["Comment body is required."],
+    "created_by_id": ["User with ID 005xx000001234XYZ does not exist."]
+  }
+}
+```
+
+**404** - Case not found:
+```json
+{
+  "success": false,
+  "message": "Case not found."
+}
+```
+
+**Sample curl:**
+```bash
+# Create a new comment
+curl -s -X POST "http://localhost:8000/api/complaints-cases/500xx000001234ABC/comments/" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "comment_body": "This is a new comment from Agent360",
+    "is_published": true,
+    "created_by_id": "005xx000001234ABC"
+  }'
+```
+
+**Notes:**
+- New comments are created with `cc_agent360_source = true` to indicate they originated from Agent360
+- Comments are created with `cc_sync_status = 0` (pending sync) and will be synced to Salesforce by the sync process
+- The `cc_sf_id` field will be NULL until the comment is synced to Salesforce
+- The `created_by_id` must reference an existing user in the users table
+- Comment body is trimmed of leading/trailing whitespace and cannot be blank
 
 ---
 

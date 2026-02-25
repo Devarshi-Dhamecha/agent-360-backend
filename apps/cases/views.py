@@ -3,10 +3,12 @@ Complaints & Cases API views.
 """
 from datetime import datetime
 from django.db.models import Count, Q
+from django.utils import timezone
 from drf_spectacular.utils import OpenApiParameter, extend_schema
 from rest_framework.permissions import AllowAny
 from rest_framework.views import APIView
 from rest_framework.exceptions import ValidationError
+from rest_framework import status
 
 from core.api.responses import APIResponse
 from core.api.utils.pagination import StandardPagination
@@ -18,6 +20,8 @@ from .serializers import (
     CaseDetailSerializer,
     CaseCommentSerializer,
     CaseTimelineSerializer,
+    CreateCaseCommentSerializer,
+    CaseCommentResponseSerializer,
 )
 
 # Query param validation
@@ -262,8 +266,32 @@ class CaseDetailAPIView(APIView):
         )
 
 
+@extend_schema(
+    methods=['GET'],
+    parameters=[
+        OpenApiParameter(
+            name='case_id',
+            type=str,
+            location=OpenApiParameter.PATH,
+            description='Case Salesforce ID',
+            required=True,
+        ),
+    ],
+)
+@extend_schema(
+    methods=['POST'],
+    request=CreateCaseCommentSerializer,
+    responses={
+        201: CaseCommentResponseSerializer,
+        400: {'description': 'Validation error'},
+        404: {'description': 'Case not found'},
+    },
+)
 class CaseCommentsAPIView(APIView):
-    """GET /api/complaints-cases/{case_id}/comments - comments latest first."""
+    """
+    GET /api/complaints-cases/{case_id}/comments - comments latest first.
+    POST /api/complaints-cases/{case_id}/comments - create new comment.
+    """
     permission_classes = [AllowAny]
 
     def get(self, request, case_id):
@@ -275,13 +303,54 @@ class CaseCommentsAPIView(APIView):
 
         comments = (
             CaseComment.objects.filter(cc_case_id_id=case_id)
-            .select_related('cc_sf_created_by_id')
+            .select_related('cc_agent_created_by', 'cc_sf_created_by_id')
             .order_by('-cc_id')
         )
         serializer = CaseCommentSerializer(comments, many=True)
         return APIResponse.success(
             data=serializer.data,
             message='Comments retrieved successfully',
+        )
+
+    def post(self, request, case_id):
+        """Create a new case comment."""
+        # Validate case exists
+        try:
+            case = Case.objects.get(cs_sf_id=case_id)
+        except Case.DoesNotExist:
+            from rest_framework.exceptions import NotFound
+            raise NotFound('Case not found.')
+
+        # Validate input
+        input_serializer = CreateCaseCommentSerializer(data=request.data)
+        if not input_serializer.is_valid():
+            raise ValidationError(input_serializer.errors)
+
+        validated_data = input_serializer.validated_data
+
+        # Create comment (dates will be handled by model's save method)
+        comment = CaseComment.objects.create(
+            cc_case_id=case,
+            cc_comment_body=validated_data['comment_body'],
+            cc_is_published=validated_data.get('is_published', True),
+            cc_agent_created_by_id=validated_data['created_by_id'],
+            cc_agent_created_date=timezone.now(),
+            cc_agent360_source=True,
+            cc_sync_status=0,  # Pending sync to Salesforce
+            cc_version=1,
+            cc_retry_count=0,
+            cc_active=1,
+        )
+
+        # Fetch the created comment with related user data
+        comment = CaseComment.objects.select_related('cc_agent_created_by').get(cc_id=comment.cc_id)
+
+        # Serialize response
+        output_serializer = CaseCommentResponseSerializer(comment)
+        return APIResponse.created(
+            data=output_serializer.data,
+            message='Comment created successfully',
+            resource_id=str(comment.cc_id),
         )
 
 
