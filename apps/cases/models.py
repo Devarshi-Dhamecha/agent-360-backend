@@ -304,10 +304,12 @@ class CaseComment(models.Model):
         verbose_name='Active Flag'
     )
     cc_created_at = models.DateTimeField(
+        auto_now_add=True,
         db_column='cc_created_at',
         verbose_name='Created At'
     )
     cc_updated_at = models.DateTimeField(
+        auto_now=True,
         db_column='cc_updated_at',
         verbose_name='Updated At'
     )
@@ -321,26 +323,6 @@ class CaseComment(models.Model):
             models.Index(fields=['cc_sync_status'], name='idx_case_comments_sync_status'),
             models.Index(fields=['cc_retry_count'], name='idx_case_comments_retry_count'),
         ]
-
-    def save(self, *args, **kwargs):
-        """Override save to remove microseconds from datetime fields."""
-        from django.utils import timezone
-        now = timezone.now().replace(microsecond=0)
-        
-        # Set created_at on first save
-        if not self.pk and not self.cc_created_at:
-            self.cc_created_at = now
-        
-        # Always update updated_at
-        self.cc_updated_at = now
-        
-        # Remove microseconds from agent dates if they exist
-        if self.cc_agent_created_date:
-            self.cc_agent_created_date = self.cc_agent_created_date.replace(microsecond=0)
-        if self.cc_agent_modified_date:
-            self.cc_agent_modified_date = self.cc_agent_modified_date.replace(microsecond=0)
-        
-        super().save(*args, **kwargs)
 
     def __str__(self):
         return f"Comment on {self.cc_case_id}"

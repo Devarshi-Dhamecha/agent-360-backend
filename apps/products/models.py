@@ -746,6 +746,18 @@ class Order(models.Model):
         db_column='ord_end_date',
         verbose_name='End Date'
     )
+    ord_expected_delivery_date = models.DateField(
+        null=True,
+        blank=True,
+        db_column='ord_expected_delivery_date',
+        verbose_name='Expected Delivery Date'
+    )
+    ord_delivery_date = models.DateField(
+        null=True,
+        blank=True,
+        db_column='ord_delivery_date',
+        verbose_name='Delivery Date'
+    )
     ord_type = models.CharField(
         max_length=100,
         null=True,
@@ -800,6 +812,22 @@ class Order(models.Model):
         blank=True,
         db_column='ord_ordered_amount_tax',
         verbose_name='Ordered Amount with Tax'
+    )
+    ord_delivered_amount = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='ord_delivered_amount',
+        verbose_name='Delivered Amount'
+    )
+    ord_delivered_quantity = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='ord_delivered_quantity',
+        verbose_name='Delivered Quantity'
     )
     ord_currency_iso_code = models.CharField(
         max_length=10,
@@ -913,6 +941,18 @@ class OrderLineItem(models.Model):
         decimal_places=2,
         db_column='ori_unit_price',
         verbose_name='Unit Price'
+    )
+    ori_end_date = models.DateField(
+        null=True,
+        blank=True,
+        db_column='ori_end_date',
+        verbose_name='End Date'
+    )
+    ori_expected_delivery_date = models.DateField(
+        null=True,
+        blank=True,
+        db_column='ori_expected_delivery_date',
+        verbose_name='Expected Delivery Date'
     )
     ori_total_price = models.DecimalField(
         max_digits=18,
