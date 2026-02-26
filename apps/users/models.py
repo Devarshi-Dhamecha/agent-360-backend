@@ -112,6 +112,12 @@ class User(models.Model):
         db_column='usr_federation_id',
         verbose_name='Federation ID'
     )
+    usr_country = models.CharField(
+        max_length=80, 
+        default='', 
+        db_column='usr_country',
+        verbose_name='Country'
+    )
     usr_time_zone = models.CharField(
         max_length=100, 
         db_column='usr_time_zone',
@@ -134,6 +140,13 @@ class User(models.Model):
         max_length=18, 
         db_column='usr_last_modified_by_id',
         verbose_name='Last Modified By ID'
+    )
+    usr_usage_company = models.CharField(
+        max_length=10, 
+        null=True, 
+        blank=True, 
+        db_column='usr_usage_company',
+        verbose_name='Usage Company'
     )
     usr_active = models.SmallIntegerField(
         default=1, 
