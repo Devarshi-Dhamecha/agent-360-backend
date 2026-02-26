@@ -28,6 +28,14 @@ class ErrorMessages:
     TOKEN_INVALID = "Invalid token"
     PERMISSION_DENIED = "Permission denied"
     
+    # ALB Authentication
+    MISSING_AUTH_TOKEN = "Missing authentication token"
+    INVALID_AUTH_TOKEN = "Invalid authentication token"
+    MISSING_EMAIL_CLAIM = "Invalid token claims: missing email"
+    USER_NOT_FOUND = "User not found or inactive"
+    AUTH_TOKEN_EXPIRED = "Authentication token has expired"
+    AUTH_TOKEN_INVALID_SIGNATURE = "Invalid token signature"
+    
     # Resource Errors
     RESOURCE_NOT_FOUND = "Resource not found"
     ACCOUNT_NOT_FOUND = "Account not found"
@@ -132,6 +140,12 @@ class ErrorCodes:
     INVALID_CREDENTIALS = "INVALID_CREDENTIALS"
     TOKEN_EXPIRED = "TOKEN_EXPIRED"
     TOKEN_INVALID = "TOKEN_INVALID"
+    
+    # ALB Authentication
+    MISSING_AUTH_TOKEN = "MISSING_AUTH_TOKEN"
+    INVALID_AUTH_TOKEN = "INVALID_AUTH_TOKEN"
+    MISSING_EMAIL_CLAIM = "MISSING_EMAIL_CLAIM"
+    USER_NOT_FOUND = "USER_NOT_FOUND"
     
     # Authorization
     PERMISSION_DENIED = "PERMISSION_DENIED"

@@ -5,9 +5,16 @@ from django.contrib import admin
 from django.urls import path, include
 from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 from apps.products.urls import sales_urlpatterns
+from apps.users.auth_views import logout_view, health_check
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    
+    # Authentication endpoints
+    path('api/auth/logout/', logout_view, name='auth-logout'),
+    path('api/health/', health_check, name='health-check'),
+    
+    # App endpoints
     path('api/accounts/', include('apps.accounts.urls')),
     path('api/complaints-cases/', include('apps.cases.urls')),
     path('api/campaigns/', include('apps.campaigns.urls')),
