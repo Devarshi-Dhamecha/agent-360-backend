@@ -39,8 +39,10 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PATH="/venv/bin:$PATH"
 
 # Install ONLY runtime libraries (no compilers)
+# wget: used by HEALTHCHECK (more reliable than Python urllib in minimal Alpine)
 RUN apk add --no-cache \
-    libpq
+    libpq \
+    wget
 
 # Create non-root user
 RUN addgroup -S app && adduser -S app -G app
@@ -64,8 +66,9 @@ USER app
 # -------------------------
 # Healthcheck (ECS ready)
 # -------------------------
-HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health/')" || exit 1  
+HEALTHCHECK --interval=20s --timeout=5s --start-period=60s --retries=3 \
+CMD python -c "import urllib.request,sys; \
+    sys.exit(0) if urllib.request.urlopen('http://localhost:8000/api/health/').status == 200 else sys.exit(1)"
 
 EXPOSE 8000
 
