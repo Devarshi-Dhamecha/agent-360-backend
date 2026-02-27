@@ -15,17 +15,11 @@ class ProductBrand(models.Model):
         verbose_name='Brand Name'
     )
     pb_brand_code = models.CharField(
-        max_length=50,
+        max_length=255,
         null=True,
         blank=True,
         db_column='pb_brand_code',
         verbose_name='Brand Code'
-    )
-    pb_description = models.TextField(
-        null=True,
-        blank=True,
-        db_column='pb_description',
-        verbose_name='Description'
     )
     pb_is_active = models.BooleanField(
         null=True,
@@ -500,14 +494,6 @@ class ArfRollingForecast(models.Model):
         db_column='arf_draft_unit_price',
         verbose_name='Draft Unit Price'
     )
-    arf_draft_value = models.DecimalField(
-        max_digits=16,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        db_column='arf_draft_value',
-        verbose_name='Draft Value'
-    )
     # Pending stage fields
     arf_pending_quantity = models.DecimalField(
         max_digits=16,
@@ -524,14 +510,6 @@ class ArfRollingForecast(models.Model):
         blank=True,
         db_column='arf_pending_unit_price',
         verbose_name='Pending Unit Price'
-    )
-    arf_pending_value = models.DecimalField(
-        max_digits=16,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        db_column='arf_pending_value',
-        verbose_name='Pending Value'
     )
     # Approved stage fields
     arf_approved_quantity = models.DecimalField(
@@ -550,33 +528,11 @@ class ArfRollingForecast(models.Model):
         db_column='arf_approved_unit_price',
         verbose_name='Approved Unit Price'
     )
-    arf_approved_value = models.DecimalField(
-        max_digits=16,
-        decimal_places=2,
-        null=True,
-        blank=True,
-        db_column='arf_approved_value',
-        verbose_name='Approved Value'
-    )
     arf_rejection_reason = models.TextField(
         null=True,
         blank=True,
         db_column='arf_rejection_reason',
         verbose_name='Rejection Reason'
-    )
-    arf_product_formula = models.CharField(
-        max_length=255,
-        null=True,
-        blank=True,
-        db_column='arf_product_formula',
-        verbose_name='Product Formula'
-    )
-    arf_account_or_user_formula = models.CharField(
-        max_length=255,
-        null=True,
-        blank=True,
-        db_column='arf_account_or_user_formula',
-        verbose_name='Account or User Formula'
     )
     arf_product_family = models.CharField(
         max_length=100,
@@ -929,12 +885,6 @@ class OrderLineItem(models.Model):
         blank=True,
         db_column='ori_product_code',
         verbose_name='Product Code'
-    )
-    ori_quantity = models.DecimalField(
-        max_digits=18,
-        decimal_places=2,
-        db_column='ori_quantity',
-        verbose_name='Quantity'
     )
     ori_unit_price = models.DecimalField(
         max_digits=18,

@@ -9,16 +9,17 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Dict, List, Optional, Tuple
 
-from django.db import connection
+from django.db.models import Sum, Max, F, Q, DecimalField, Value
+from django.db.models.functions import TruncMonth, Coalesce
 from django.utils import timezone
 
 from apps.accounts.models import Account
-from apps.products.models import ArfRollingForecast, Product
+from apps.products.models import ArfRollingForecast, Product, InvoiceLineItem
 
 from .services import _currency_symbol_for_account
 
 # Statuses that allow draft updates (not Approved or Frozen)
-ARF_EDITABLE_STATUSES = ("Draft", "Pending_Approval", "Fixes_Needed")
+ARF_EDITABLE_STATUSES = ("Draft", "Pending_Approval", "Fixes_Needed", "Approved")
 
 
 def _parse_dates(from_month: str, to_month: str) -> Tuple[date, date]:
@@ -49,36 +50,16 @@ def _ly_range(from_date: date, to_date: date) -> Tuple[date, date]:
     return ly_from, ly_to
 
 
-def _months_in_range(from_date: date, to_date: date) -> List[Tuple[str, str]]:
-    """List of (YYYY-MM, monthLabel e.g. February 2026) from from_date to to_date by month."""
-    months = []
-    y, m = from_date.year, from_date.month
-    end_y, end_m = to_date.year, to_date.month
-    while (y, m) <= (end_y, end_m):
-        ym = f"{y}-{m:02d}"
-        try:
-            label_date = date(y, m, 1)
-            month_label = label_date.strftime("%B %Y")  # e.g. February 2026
-        except Exception:
-            month_label = ym
-        months.append((ym, month_label))
-        m += 1
-        if m > 12:
-            m = 1
-            y += 1
-    return months
-
-
-def _add_one_year_month_key(month_key: str) -> str:
-    """Shift a YYYY-MM key forward by one year (LY month -> current month key)."""
-    year, month = map(int, month_key.split("-"))
-    return f"{year + 1}-{month:02d}"
-
-
 def _subtract_one_year_month_key(month_key: str) -> str:
     """Shift a YYYY-MM key back by one year (API month -> LY month for lookup)."""
     year, month = map(int, month_key.split("-"))
     return f"{year - 1}-{month:02d}"
+
+
+def _add_one_year_month_key(month_key: str) -> str:
+    """Shift a YYYY-MM key forward by one year (LY month -> current year month for lookup)."""
+    year, month = map(int, month_key.split("-"))
+    return f"{year + 1}-{month:02d}"
 
 
 def get_rfc_by_month(
@@ -93,11 +74,6 @@ def get_rfc_by_month(
     from_date/to_date are the current (RFC) range; LY range is same window - 1 year.
     """
     ly_from, ly_to = _ly_range(from_date, to_date)
-    months_list = _months_in_range(from_date, to_date)
-    from_str = from_date.isoformat()
-    to_str = to_date.isoformat()
-    ly_from_str = ly_from.isoformat()
-    ly_to_str = ly_to.isoformat()
 
     if not product_ids:
         return {
@@ -119,116 +95,126 @@ def get_rfc_by_month(
         if pid not in product_names:
             product_names[pid] = pid
 
-    placeholders = ",".join(["%s"] * len(products_order))
-
     # Last year: invoice_line_items + invoices, by product and month
     # Include both 'Closed' and 'Posted' so LY data appears when invoices are in either status
-    ly_query = f"""
-        SELECT
-            ili.ili_product_id AS product_id,
-            TO_CHAR(inv.inv_invoice_date, 'YYYY-MM') AS month_key,
-            COALESCE(SUM(ili.ili_quantity), 0) AS ly_qty,
-            COALESCE(SUM(ili.ili_net_price), 0) AS ly_value
-        FROM invoice_line_items ili
-        INNER JOIN invoices inv ON inv.inv_sf_id = ili.ili_invoice_id
-        WHERE inv.inv_account_id = %s
-          AND ili.ili_product_id IN ({placeholders})
-          AND inv.inv_invoice_date BETWEEN %s AND %s
-          AND inv.inv_status IN ('Closed', 'Posted')
-          AND inv.inv_valid = TRUE
-          AND ili.ili_valid = TRUE
-          AND (inv.inv_invoice_type IS NULL OR inv.inv_invoice_type != 'Credit Note')
-        GROUP BY ili.ili_product_id, TO_CHAR(inv.inv_invoice_date, 'YYYY-MM')
-    """
-    with connection.cursor() as cursor:
-        cursor.execute(
-            ly_query,
-            [account_id] + products_order + [ly_from_str, ly_to_str],
-        )
-        ly_rows = {
-            # Map LY month (e.g. 2025-10) to current month key (2026-10)
-            (row[0], _add_one_year_month_key(row[1])): {
-                "lyQty": float(row[2]),
-                "lyValue": float(row[3]),
-            }
-            for row in cursor.fetchall()
+    ly_data = InvoiceLineItem.objects.filter(
+        ili_invoice_id__inv_account_id=account_id,
+        ili_product_id__in=products_order,
+        ili_invoice_id__inv_invoice_date__range=[ly_from, ly_to],
+        ili_invoice_id__inv_status__in=['Closed', 'Posted'],
+        ili_invoice_id__inv_valid=True,
+        ili_valid=True,
+    ).exclude(
+        ili_invoice_id__inv_invoice_type='Credit Note'
+    ).annotate(
+        month=TruncMonth('ili_invoice_id__inv_invoice_date')
+    ).values('ili_product_id', 'month').annotate(
+        ly_qty=Coalesce(Sum('ili_quantity'), Decimal('0')),
+        ly_value=Coalesce(Sum('ili_net_price'), Decimal('0'))
+    )
+
+    # Convert to dict with month key shifted forward by 1 year
+    ly_rows = {}
+    for row in ly_data:
+        product_id = row['ili_product_id']
+        month_date = row['month']
+        month_key = f"{month_date.year}-{month_date.month:02d}"
+        # Shift LY month to current year
+        current_month_key = _add_one_year_month_key(month_key)
+        ly_rows[(product_id, current_month_key)] = {
+            "lyQty": float(row['ly_qty']),
+            "lyValue": float(row['ly_value']),
         }
 
-    # Current year: arf_rolling_forecasts, draft and approved by product and month; include unit prices and rejection reason
-    rfc_query = f"""
-        SELECT
-            arf.arf_product_id AS product_id,
-            TO_CHAR(arf.arf_forecast_date, 'YYYY-MM') AS month_key,
-            COALESCE(SUM(arf.arf_draft_quantity), 0) AS draft_qty,
-            COALESCE(SUM(arf.arf_draft_value), 0) AS draft_value,
-            MAX(arf.arf_draft_unit_price) AS draft_unit_price,
-            COALESCE(SUM(arf.arf_approved_quantity), 0) AS approved_qty,
-            COALESCE(SUM(arf.arf_approved_value), 0) AS approved_value,
-            MAX(arf.arf_approved_unit_price) AS approved_unit_price,
-            MAX(arf.arf_rejection_reason) AS rejection_reason
-        FROM arf_rolling_forecasts arf
-        WHERE arf.arf_account_id = %s
-          AND arf.arf_product_id IN ({placeholders})
-          AND arf.arf_forecast_date BETWEEN %s AND %s
-          AND arf.arf_active = 1
-        GROUP BY arf.arf_product_id, TO_CHAR(arf.arf_forecast_date, 'YYYY-MM')
-    """
-    with connection.cursor() as cursor:
-        cursor.execute(
-            rfc_query,
-            [account_id] + products_order + [from_str, to_str],
-        )
-        rfc_rows = {
-            (row[0], row[1]): {
-                "draftRfcQty": float(row[2]),
-                "draftRfcValue": float(row[3]),
-                "draftRfcUnitPrice": float(row[4]) if row[4] is not None else None,
-                "approvedRfcQty": float(row[5]),
-                "approvedRfcValue": float(row[6]),
-                "approvedRfcUnitPrice": float(row[7]) if row[7] is not None else None,
-                "rejectionReason": row[8] if row[8] else None,
-            }
-            for row in cursor.fetchall()
+    # Current year: arf_rolling_forecasts, draft and approved by product and month
+    rfc_data = ArfRollingForecast.objects.filter(
+        arf_account_id=account_id,
+        arf_product_id__in=products_order,
+        arf_forecast_date__range=[from_date, to_date],
+        arf_active=1,
+    ).annotate(
+        month=TruncMonth('arf_forecast_date'),
+        draft_qty=Coalesce(Sum('arf_draft_quantity'), Decimal('0')),
+        draft_value=Coalesce(Sum(F('arf_draft_quantity') * F('arf_draft_unit_price'), output_field=DecimalField()), Decimal('0')),
+        draft_unit_price=Max('arf_draft_unit_price'),
+        approved_qty=Coalesce(Sum('arf_approved_quantity'), Decimal('0')),
+        approved_value=Coalesce(Sum(F('arf_approved_quantity') * F('arf_approved_unit_price'), output_field=DecimalField()), Decimal('0')),
+        approved_unit_price=Max('arf_approved_unit_price'),
+    ).values(
+        'arf_id', 'arf_product_id', 'month', 'arf_rejection_reason'
+    ).annotate(
+        draft_qty=Coalesce(Sum('arf_draft_quantity'), Decimal('0')),
+        draft_value=Coalesce(Sum(F('arf_draft_quantity') * F('arf_draft_unit_price'), output_field=DecimalField()), Decimal('0')),
+        draft_unit_price=Max('arf_draft_unit_price'),
+        approved_qty=Coalesce(Sum('arf_approved_quantity'), Decimal('0')),
+        approved_value=Coalesce(Sum(F('arf_approved_quantity') * F('arf_approved_unit_price'), output_field=DecimalField()), Decimal('0')),
+        approved_unit_price=Max('arf_approved_unit_price'),
+    ).filter(
+        Q(draft_qty__gt=0) | Q(approved_qty__gt=0)
+    )
+
+    # Convert to dict
+    rfc_rows = {}
+    for row in rfc_data:
+        product_id = row['arf_product_id']
+        month_date = row['month']
+        month_key = f"{month_date.year}-{month_date.month:02d}"
+        rfc_rows[(product_id, month_key)] = {
+            "rfcId": row['arf_id'],
+            "draftRfcQty": float(row['draft_qty']),
+            "draftRfcValue": float(row['draft_value']),
+            "draftRfcUnitPrice": float(row['draft_unit_price']) if row['draft_unit_price'] is not None else None,
+            "approvedRfcQty": float(row['approved_qty']),
+            "approvedRfcValue": float(row['approved_value']),
+            "approvedRfcUnitPrice": float(row['approved_unit_price']) if row['approved_unit_price'] is not None else None,
+            "rejectionReason": row['arf_rejection_reason'] if row['arf_rejection_reason'] else None,
         }
 
-    # Build products list: each product has months with ly + draft + approved
+    # Build products list: only include months that have RFC entries in the forecast table
     products_out = []
     for product_id in products_order:
         product_name = product_names.get(product_id, product_id)
         months_out = []
-        for ym, month_label in months_list:
-            ly_month_key = _subtract_one_year_month_key(ym)  # API month 2026-10 -> LY 2025-10
+        
+        # Only iterate through months that have RFC data for this product
+        for (rfc_product_id, ym), rfc_data_item in rfc_rows.items():
+            if rfc_product_id != product_id:
+                continue
+            
+            # Get month label
+            try:
+                year, month = map(int, ym.split("-"))
+                label_date = date(year, month, 1)
+                month_label = label_date.strftime("%B %Y")
+            except Exception:
+                month_label = ym
+            
+            # Get LY data if available (optional, for display)
+            ly_month_key = _subtract_one_year_month_key(ym)
             ly = ly_rows.get((product_id, ly_month_key), {"lyQty": 0.0, "lyValue": 0.0})
-            rfc = rfc_rows.get(
-                (product_id, ym),
-                {
-                    "draftRfcQty": 0.0,
-                    "draftRfcValue": 0.0,
-                    "draftRfcUnitPrice": None,
-                    "approvedRfcQty": 0.0,
-                    "approvedRfcValue": 0.0,
-                    "approvedRfcUnitPrice": None,
-                    "rejectionReason": None,
-                },
-            )
+            
             months_out.append({
+                "rfcId": rfc_data_item["rfcId"],
                 "month": ym,
                 "monthLabel": month_label,
                 "lyQty": ly["lyQty"],
                 "lyValue": ly["lyValue"],
-                "draftRfcQty": rfc["draftRfcQty"],
-                "draftRfcValue": rfc["draftRfcValue"],
-                "draftRfcUnitPrice": rfc.get("draftRfcUnitPrice"),
-                "approvedRfcQty": rfc["approvedRfcQty"],
-                "approvedRfcValue": rfc["approvedRfcValue"],
-                "approvedRfcUnitPrice": rfc.get("approvedRfcUnitPrice"),
-                "rejectionReason": rfc.get("rejectionReason"),
+                "draftRfcQty": rfc_data_item["draftRfcQty"],
+                "draftRfcValue": rfc_data_item["draftRfcValue"],
+                "draftRfcUnitPrice": rfc_data_item.get("draftRfcUnitPrice"),
+                "approvedRfcQty": rfc_data_item["approvedRfcQty"],
+                "approvedRfcValue": rfc_data_item["approvedRfcValue"],
+                "approvedRfcUnitPrice": rfc_data_item.get("approvedRfcUnitPrice"),
+                "rejectionReason": rfc_data_item.get("rejectionReason"),
             })
-        products_out.append({
-            "productId": product_id,
-            "productName": product_name,
-            "months": months_out,
-        })
+        
+        # Only include product if it has at least one RFC entry
+        if months_out:
+            products_out.append({
+                "productId": product_id,
+                "productName": product_name,
+                "months": months_out,
+            })
 
     return {
         "accountId": account_id,
@@ -260,11 +246,12 @@ def update_rfc(
     modified_by_user: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """
-    Update draft RFC quantity (and backend-calculated draft value) in arf_rolling_forecasts.
+    Update draft RFC quantity in arf_rolling_forecasts.
 
-    - User sends only draftRfcQty per (productId, month).
-    - Backend sets arf_draft_quantity; computes arf_draft_value = qty × unit_price
-      (unit price from existing row: arf_draft_unit_price else arf_approved_unit_price; else null).
+    - User sends draftRfcQty per (productId, month) or rfcId.
+    - If rfcId is provided, it's used directly (faster, no ambiguity).
+    - If rfcId is not provided, falls back to searching by productId + month.
+    - Backend sets arf_draft_quantity; draft value is calculated as qty × unit_price on retrieval.
     - Only rows with status in Draft, Pending_Approval, Fixes_Needed and arf_active=1 are updated.
     - Returns updatedCount, updated list, and notUpdated list with reasons.
     """
@@ -276,22 +263,16 @@ def update_rfc(
         modified_by_id = str(modified_by_user.usr_sf_id)
 
     for item in updates:
+        rfc_id = item.get("rfcId")
         product_id = (item.get("productId") or "").strip()
         month_str = (item.get("month") or "").strip()
         draft_qty = item.get("draftRfcQty")
 
-        if not product_id or not month_str:
-            not_updated.append({
-                "productId": product_id or "(missing)",
-                "month": month_str or "(missing)",
-                "reason": "productId and month are required",
-            })
-            continue
-
         if draft_qty is None:
             not_updated.append({
-                "productId": product_id,
-                "month": month_str,
+                "rfcId": rfc_id,
+                "productId": product_id or "(missing)",
+                "month": month_str or "(missing)",
                 "reason": "draftRfcQty is required",
             })
             continue
@@ -300,82 +281,121 @@ def update_rfc(
             qty_decimal = Decimal(str(draft_qty))
             if qty_decimal < 0:
                 not_updated.append({
-                    "productId": product_id,
-                    "month": month_str,
+                    "rfcId": rfc_id,
+                    "productId": product_id or "(missing)",
+                    "month": month_str or "(missing)",
                     "reason": "draftRfcQty must be non-negative",
                 })
                 continue
         except (ValueError, TypeError):
             not_updated.append({
-                "productId": product_id,
-                "month": month_str,
+                "rfcId": rfc_id,
+                "productId": product_id or "(missing)",
+                "month": month_str or "(missing)",
                 "reason": "draftRfcQty must be a valid number",
             })
             continue
 
-        try:
-            forecast_date = _parse_month_to_date(month_str)
-        except (ValueError, IndexError):
-            not_updated.append({
-                "productId": product_id,
-                "month": month_str,
-                "reason": "month must be YYYY-MM",
-            })
-            continue
+        row = None
 
-        if not _is_future_month(month_str):
-            not_updated.append({
-                "productId": product_id,
-                "month": month_str,
-                "reason": "Only future months can be edited",
-            })
-            continue
+        # If rfcId is provided, use it directly
+        if rfc_id:
+            try:
+                rfc_id_int = int(rfc_id)
+                row = (
+                    ArfRollingForecast.objects.filter(
+                        arf_id=rfc_id_int,
+                        arf_account_id=account_id,
+                        arf_status__in=ARF_EDITABLE_STATUSES,
+                        arf_active=1,
+                    )
+                    .first()
+                )
+                if not row:
+                    not_updated.append({
+                        "rfcId": rfc_id,
+                        "productId": product_id or "(missing)",
+                        "month": month_str or "(missing)",
+                        "reason": "RFC not found or not editable",
+                    })
+                    continue
+            except (ValueError, TypeError):
+                not_updated.append({
+                    "rfcId": rfc_id,
+                    "productId": product_id or "(missing)",
+                    "month": month_str or "(missing)",
+                    "reason": "rfcId must be a valid integer",
+                })
+                continue
+        else:
+            # Fallback: search by productId + month
+            if not product_id or not month_str:
+                not_updated.append({
+                    "rfcId": rfc_id,
+                    "productId": product_id or "(missing)",
+                    "month": month_str or "(missing)",
+                    "reason": "rfcId or (productId + month) are required",
+                })
+                continue
 
-        row = (
-            ArfRollingForecast.objects.filter(
-                arf_account_id=account_id,
-                arf_product_id=product_id,
-                arf_forecast_date__year=forecast_date.year,
-                arf_forecast_date__month=forecast_date.month,
-                arf_status__in=ARF_EDITABLE_STATUSES,
-                arf_active=1,
+            try:
+                forecast_date = _parse_month_to_date(month_str)
+            except (ValueError, IndexError):
+                not_updated.append({
+                    "rfcId": rfc_id,
+                    "productId": product_id,
+                    "month": month_str,
+                    "reason": "month must be YYYY-MM",
+                })
+                continue
+
+            if not _is_future_month(month_str):
+                not_updated.append({
+                    "rfcId": rfc_id,
+                    "productId": product_id,
+                    "month": month_str,
+                    "reason": "Only future months can be edited",
+                })
+                continue
+
+            row = (
+                ArfRollingForecast.objects.filter(
+                    arf_account_id=account_id,
+                    arf_product_id=product_id,
+                    arf_forecast_date__year=forecast_date.year,
+                    arf_forecast_date__month=forecast_date.month,
+                    arf_status__in=ARF_EDITABLE_STATUSES,
+                    arf_active=1,
+                )
+                .order_by("arf_forecast_date")
+                .first()
             )
-            .order_by("arf_forecast_date")
-            .first()
-        )
 
-        if not row:
-            not_updated.append({
-                "productId": product_id,
-                "month": month_str,
-                "reason": "No editable forecast row found for this product and month",
-            })
-            continue
-
-        unit_price = None
-        if row.arf_draft_unit_price is not None:
-            unit_price = row.arf_draft_unit_price
-        elif row.arf_approved_unit_price is not None:
-            unit_price = row.arf_approved_unit_price
-
-        draft_value = None
-        if unit_price is not None:
-            draft_value = (qty_decimal * unit_price).quantize(Decimal("0.01"))
+            if not row:
+                not_updated.append({
+                    "rfcId": rfc_id,
+                    "productId": product_id,
+                    "month": month_str,
+                    "reason": "No editable forecast row found for this product and month",
+                })
+                continue
 
         row.arf_draft_quantity = qty_decimal
-        row.arf_draft_value = draft_value
         if modified_by_id:
             row.arf_agent_modified_by_id = modified_by_id
         row.arf_agent_modified_date = modified_at
         row.save(update_fields=[
             "arf_draft_quantity",
-            "arf_draft_value",
-            "arf_agent_modified_by_id",
+            "arf_agent_modified_by",
             "arf_agent_modified_date",
             "arf_updated_at",
         ])
 
-        updated.append({"productId": product_id, "month": month_str})
+        updated.append({
+            "rfcId": row.arf_id,
+            "productId": str(row.arf_product_id_id),
+            "month": month_str or f"{row.arf_forecast_date.year}-{row.arf_forecast_date.month:02d}",
+        })
 
     return {
         "accountId": account_id,

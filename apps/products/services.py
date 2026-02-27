@@ -110,7 +110,7 @@ class ProductPerformanceService:
         forecast_revenue AS (
             SELECT
                 arf.arf_product_id AS product_id,
-                COALESCE(SUM(arf.arf_approved_value), 0) AS forecast_revenue
+                COALESCE(SUM(arf.arf_approved_quantity * arf.arf_approved_unit_price), 0) AS forecast_revenue
             FROM
                 arf_rolling_forecasts arf
             WHERE

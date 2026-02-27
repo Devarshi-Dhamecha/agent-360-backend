@@ -129,7 +129,7 @@ class SalesAnalyticsService:
         rfc AS (
             SELECT
                 prd.prd_family AS family,
-                COALESCE(SUM(arf.arf_approved_value), 0) AS rfc_value
+                COALESCE(SUM(arf.arf_approved_quantity * arf.arf_approved_unit_price), 0) AS rfc_value
             FROM
                 arf_rolling_forecasts arf
             JOIN
@@ -295,7 +295,7 @@ class SalesAnalyticsService:
         rfc AS (
             SELECT
                 arf.arf_product_id AS product_id,
-                COALESCE(SUM(arf.arf_approved_value), 0) AS rfc_value
+                COALESCE(SUM(arf.arf_approved_quantity * arf.arf_approved_unit_price), 0) AS rfc_value
             FROM
                 arf_rolling_forecasts arf
             JOIN

@@ -49,6 +49,6 @@ class OrderAdmin(admin.ModelAdmin):
 
 @admin.register(OrderLineItem)
 class OrderLineItemAdmin(admin.ModelAdmin):
-    list_display = ('ori_sf_id', 'ori_order_id', 'ori_product_id', 'ori_quantity', 'ori_unit_price', 'ori_total_price', 'ori_status')
+    list_display = ('ori_sf_id', 'ori_order_id', 'ori_product_id', 'ori_ordered_quantity', 'ori_unit_price', 'ori_total_price', 'ori_status')
     list_filter = ('ori_status', 'ori_active')
     search_fields = ('ori_sf_id', 'ori_product_name', 'ori_product_code')
