@@ -139,11 +139,8 @@ class CampaignListWithTasksAPIView(APIView):
                 errors=errors,
             )
 
-        campaigns_qs = Campaign.objects.select_related(
-            "cmp_owner_id",
-            "cmp_account_id",
-        ).filter(
-            cmp_account_id_id=account_id,
+        campaigns_qs = Campaign.objects.filter(
+            cmp_account_id=account_id,
             cmp_active=1,
         )
 
@@ -185,16 +182,16 @@ class CampaignListWithTasksAPIView(APIView):
             campaign_ids = [campaign.cmp_sf_id for campaign in page]
 
         tasks_qs = Task.objects.filter(
-            tsk_what_id_id__in=campaign_ids,
+            tsk_what_id__in=campaign_ids,
             tsk_active=1,
         )
 
         if type_param == "my":
-            tasks_qs = tasks_qs.filter(tsk_owner_id_id=user_id)
+            tasks_qs = tasks_qs.filter(tsk_owner_id=user_id)
 
         tasks_by_campaign: Dict[str, List[Task]] = {}
         for task in tasks_qs:
-            cid = task.tsk_what_id_id
+            cid = task.tsk_what_id
             if cid:
                 tasks_by_campaign.setdefault(cid, []).append(task)
 
@@ -278,7 +275,7 @@ class TaskListByCampaignAPIView(APIView):
             )
 
         tasks_qs = Task.objects.filter(
-            tsk_what_id_id=campaign_id,
+            tsk_what_id=campaign_id,
             tsk_active=1,
         ).order_by("tsk_activity_date", "tsk_subject")
 

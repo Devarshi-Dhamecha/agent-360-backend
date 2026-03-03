@@ -90,8 +90,6 @@ class Account(models.Model):
         verbose_name_plural = 'Accounts'
         indexes = [
             models.Index(fields=['acc_owner_id'], name='idx_accounts_owner'),
-            models.Index(fields=['acc_name'], name='idx_accounts_name'),
-            models.Index(fields=['acc_account_number'], name='idx_accounts_number'),
             models.Index(fields=['acc_active'], name='idx_accounts_active'),
         ]
 
@@ -99,89 +97,7 @@ class Account(models.Model):
         return self.acc_name
 
 
-class AccountPlan(models.Model):
-    """Salesforce Account Plan - strategic planning for accounts"""
-    ap_sf_id = models.CharField(
-        max_length=18,
-        primary_key=True,
-        db_column='ap_sf_id',
-        verbose_name='Salesforce ID'
-    )
-    ap_name = models.CharField(
-        max_length=80,
-        db_column='ap_name',
-        verbose_name='Name'
-    )
-    ap_account_id = models.ForeignKey(
-        'accounts.Account',
-        to_field='acc_sf_id',
-        on_delete=models.CASCADE,
-        db_column='ap_account_id',
-        verbose_name='Account'
-    )
-    ap_plan_name = models.CharField(
-        max_length=255,
-        null=True,
-        blank=True,
-        db_column='ap_plan_name',
-        verbose_name='Plan Name'
-    )
-    ap_status = models.CharField(
-        max_length=100,
-        db_column='ap_status',
-        verbose_name='Status'
-    )
-    ap_start_date = models.DateField(
-        null=True,
-        blank=True,
-        db_column='ap_start_date',
-        verbose_name='Start Date'
-    )
-    ap_end_date = models.DateField(
-        null=True,
-        blank=True,
-        db_column='ap_end_date',
-        verbose_name='End Date'
-    )
-    ap_sf_created_date = models.DateTimeField(
-        db_column='ap_sf_created_date',
-        verbose_name='SF Created Date'
-    )
-    ap_last_modified_date = models.DateTimeField(
-        db_column='ap_last_modified_date',
-        verbose_name='Last Modified Date'
-    )
-    ap_last_modified_by_id = models.CharField(
-        max_length=18,
-        db_column='ap_last_modified_by_id',
-        verbose_name='Last Modified By ID'
-    )
-    ap_active = models.SmallIntegerField(
-        default=1,
-        db_column='ap_active',
-        verbose_name='Active Flag'
-    )
-    ap_created_at = models.DateTimeField(
-        auto_now_add=True,
-        db_column='ap_created_at',
-        verbose_name='Created At'
-    )
-    ap_updated_at = models.DateTimeField(
-        auto_now=True,
-        db_column='ap_updated_at',
-        verbose_name='Updated At'
-    )
 
-    class Meta:
-        db_table = 'account_plans'
-        verbose_name = 'Account Plan'
-        verbose_name_plural = 'Account Plans'
-        indexes = [
-            models.Index(fields=['ap_account_id'], name='idx_account_plans_account'),
-        ]
-
-    def __str__(self):
-        return self.ap_name
 
 
 class FrameAgreement(models.Model):
@@ -201,14 +117,20 @@ class FrameAgreement(models.Model):
     )
     fa_agreement_type = models.CharField(
         max_length=100,
+        null=True,
+        blank=True,
         db_column='fa_agreement_type',
         verbose_name='Agreement Type'
     )
     fa_start_date = models.DateField(
+        null=True,
+        blank=True,
         db_column='fa_start_date',
         verbose_name='Start Date'
     )
     fa_end_date = models.DateField(
+        null=True,
+        blank=True,
         db_column='fa_end_date',
         verbose_name='End Date'
     )
@@ -297,12 +219,12 @@ class FrameAgreement(models.Model):
         db_column='fa_last_modified_date',
         verbose_name='Last Modified Date'
     )
-    fa_last_modified_by_id = models.ForeignKey(
-        'users.User',
-        to_field='usr_sf_id',
-        on_delete=models.RESTRICT,
+    fa_last_modified_by_id = models.CharField(
+        max_length=18,
+        null=True,
+        blank=True,
         db_column='fa_last_modified_by_id',
-        verbose_name='Last Modified By'
+        verbose_name='Last Modified By ID'
     )
     fa_active = models.SmallIntegerField(
         default=1,
@@ -348,33 +270,39 @@ class Target(models.Model):
         db_column='tgt_account_id',
         verbose_name='Account'
     )
-    tgt_frame_agreement_id = models.ForeignKey(
-        'accounts.FrameAgreement',
-        to_field='fa_sf_id',
-        on_delete=models.CASCADE,
+    tgt_frame_agreement_id = models.CharField(
+        max_length=18,
         db_column='tgt_frame_agreement_id',
-        verbose_name='Frame Agreement'
+        verbose_name='Frame Agreement ID'
     )
     tgt_quarter = models.CharField(
         max_length=100,
+        null=True,
+        blank=True,
         db_column='tgt_quarter',
         verbose_name='Quarter'
     )
     tgt_net_turnover_target = models.DecimalField(
         max_digits=18,
         decimal_places=2,
+        null=True,
+        blank=True,
         db_column='tgt_net_turnover_target',
         verbose_name='Net Turnover Target'
     )
     tgt_rebate_rate = models.DecimalField(
         max_digits=6,
         decimal_places=4,
+        null=True,
+        blank=True,
         db_column='tgt_rebate_rate',
         verbose_name='Rebate Rate'
     )
     tgt_rebate_if_achieved = models.DecimalField(
         max_digits=18,
         decimal_places=2,
+        null=True,
+        blank=True,
         db_column='tgt_rebate_if_achieved',
         verbose_name='Rebate If Achieved'
     )

@@ -36,7 +36,7 @@ class AccountListAPIView(APIView):
     permission_classes = [AllowAny]
 
     def get(self, request):
-        qs = Account.objects.select_related('acc_owner_id').all()
+        qs = Account.objects.all()
         qs = qs.order_by('acc_name')
 
         # Check if pagination parameters are provided
@@ -91,7 +91,7 @@ class AccountsByUserAPIView(APIView):
 
         user_id = user_id.strip()
 
-        qs = Account.objects.select_related('acc_owner_id').filter(acc_owner_id_id=user_id)
+        qs = Account.objects.filter(acc_owner_id=user_id)
         qs = qs.order_by('acc_name')
 
         # Check if pagination parameters are provided

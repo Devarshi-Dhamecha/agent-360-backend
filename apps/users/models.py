@@ -170,8 +170,9 @@ class User(models.Model):
         verbose_name_plural = 'Users'
         indexes = [
             models.Index(fields=['usr_email'], name='idx_users_email'),
+            models.Index(fields=['usr_usage_company'], name='idx_users_usage_company'),
             models.Index(fields=['usr_active'], name='idx_users_active'),
-            models.Index(fields=['usr_federation_id'], name='idx_users_federation_id'),
+            models.Index(fields=['usr_user_role_id'], name='idx_users_role'),
         ]
 
     def __str__(self):
@@ -213,14 +214,12 @@ class RecordType(models.Model):
         db_column='rt_last_modified_date',
         verbose_name='Last Modified Date'
     )
-    rt_last_modified_by_id = models.ForeignKey(
-        'users.User',
-        to_field='usr_sf_id',
+    rt_last_modified_by_id = models.CharField(
+        max_length=18,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
         db_column='rt_last_modified_by_id',
-        verbose_name='Last Modified By'
+        verbose_name='Last Modified By ID'
     )
     rt_active = models.SmallIntegerField(
         default=1, 

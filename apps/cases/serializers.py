@@ -72,10 +72,12 @@ class CaseListSerializer(serializers.ModelSerializer):
         return _format_opened_display(obj.cs_sf_created_date)
 
     def get_account_id(self, obj):
-        return obj.cs_account_id_id if hasattr(obj, 'cs_account_id_id') else None
+        # Access the raw FK value without triggering object load
+        return getattr(obj, 'cs_account_id_id', None)
 
     def get_owner_id(self, obj):
-        return obj.cs_owner_id_id if hasattr(obj, 'cs_owner_id_id') else None
+        # Access the raw FK value without triggering object load
+        return getattr(obj, 'cs_owner_id_id', None)
 
 
 class CaseDetailSerializer(serializers.ModelSerializer):
@@ -111,10 +113,12 @@ class CaseDetailSerializer(serializers.ModelSerializer):
         return _format_opened_display(obj.cs_sf_created_date)
 
     def get_account_id(self, obj):
-        return obj.cs_account_id_id if hasattr(obj, 'cs_account_id_id') else None
+        # Access the raw FK value without triggering object load
+        return getattr(obj, 'cs_account_id_id', None)
 
     def get_owner_id(self, obj):
-        return obj.cs_owner_id_id if hasattr(obj, 'cs_owner_id_id') else None
+        # Access the raw FK value without triggering object load
+        return getattr(obj, 'cs_owner_id_id', None)
 
 
 class CaseCommentSerializer(serializers.ModelSerializer):
@@ -145,12 +149,14 @@ class CaseCommentSerializer(serializers.ModelSerializer):
         # Prioritize Agent360 creator, fallback to SF creator
         if hasattr(obj, 'cc_agent_created_by_id') and obj.cc_agent_created_by_id:
             return obj.cc_agent_created_by_id
-        return obj.cc_sf_created_by_id_id if hasattr(obj, 'cc_sf_created_by_id_id') else None
+        return obj.cc_sf_created_by_id if hasattr(obj, 'cc_sf_created_by_id') else None
 
     def get_created_by_name(self, obj):
         # Prioritize Agent360 creator, fallback to SF creator
-        user = getattr(obj, 'cc_agent_created_by', None) or getattr(obj, 'cc_sf_created_by_id', None)
-        return _user_display_name(user)
+        user = getattr(obj, 'cc_agent_created_by', None)
+        if user:
+            return _user_display_name(user)
+        return None
 
 
 class CaseTimelineSerializer(serializers.ModelSerializer):
@@ -179,10 +185,13 @@ class CaseTimelineSerializer(serializers.ModelSerializer):
         return dt.isoformat()
 
     def get_created_by_id(self, obj):
-        return obj.ch_created_by_id_id if hasattr(obj, 'ch_created_by_id_id') else None
+        return obj.ch_created_by_id if hasattr(obj, 'ch_created_by_id') else None
 
     def get_created_by_name(self, obj):
-        return _user_display_name(getattr(obj, 'ch_created_by_id', None))
+        user = getattr(obj, 'ch_created_by_id', None)
+        if isinstance(user, str):
+            return None
+        return _user_display_name(user)
 
 
 class CreateCaseCommentSerializer(serializers.Serializer):
@@ -250,4 +259,7 @@ class CaseCommentResponseSerializer(serializers.ModelSerializer):
         return obj.cc_agent_created_by_id if hasattr(obj, 'cc_agent_created_by_id') else None
 
     def get_created_by_name(self, obj):
-        return _user_display_name(getattr(obj, 'cc_agent_created_by', None))
+        user = getattr(obj, 'cc_agent_created_by', None)
+        if user:
+            return _user_display_name(user)
+        return None

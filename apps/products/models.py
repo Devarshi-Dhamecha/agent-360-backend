@@ -157,7 +157,6 @@ class Product(models.Model):
         verbose_name = 'Product'
         verbose_name_plural = 'Products'
         indexes = [
-            models.Index(fields=['prd_family'], name='idx_products_family'),
             models.Index(fields=['prd_product_brand_id'], name='idx_products_brand'),
             models.Index(fields=['prd_product_code'], name='idx_products_code'),
             models.Index(fields=['prd_active'], name='idx_products_active'),
@@ -187,14 +186,12 @@ class Invoice(models.Model):
         db_column='inv_account_id',
         verbose_name='Account'
     )
-    inv_frame_agreement_id = models.ForeignKey(
-        'accounts.FrameAgreement',
-        to_field='fa_sf_id',
+    inv_frame_agreement_id = models.CharField(
+        max_length=18,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
         db_column='inv_frame_agreement_id',
-        verbose_name='Frame Agreement'
+        verbose_name='Frame Agreement ID'
     )
     inv_invoice_date = models.DateField(
         db_column='inv_invoice_date',
@@ -315,6 +312,8 @@ class InvoiceLineItem(models.Model):
         'products.Product',
         to_field='prd_sf_id',
         on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
         db_column='ili_product_id',
         verbose_name='Product'
     )
@@ -441,6 +440,8 @@ class ArfRollingForecast(models.Model):
         'users.User',
         to_field='usr_sf_id',
         on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
         related_name='arf_sales_rep',
         db_column='arf_sales_rep_id',
         verbose_name='Sales Rep'
@@ -449,6 +450,8 @@ class ArfRollingForecast(models.Model):
         'products.Product',
         to_field='prd_sf_id',
         on_delete=models.RESTRICT,
+        null=True,
+        blank=True,
         db_column='arf_product_id',
         verbose_name='Product'
     )
@@ -494,6 +497,14 @@ class ArfRollingForecast(models.Model):
         db_column='arf_draft_unit_price',
         verbose_name='Draft Unit Price'
     )
+    arf_draft_value = models.DecimalField(
+        max_digits=16,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='arf_draft_value',
+        verbose_name='Draft Value'
+    )
     # Pending stage fields
     arf_pending_quantity = models.DecimalField(
         max_digits=16,
@@ -511,6 +522,14 @@ class ArfRollingForecast(models.Model):
         db_column='arf_pending_unit_price',
         verbose_name='Pending Unit Price'
     )
+    arf_pending_value = models.DecimalField(
+        max_digits=16,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='arf_pending_value',
+        verbose_name='Pending Value'
+    )
     # Approved stage fields
     arf_approved_quantity = models.DecimalField(
         max_digits=16,
@@ -527,6 +546,14 @@ class ArfRollingForecast(models.Model):
         blank=True,
         db_column='arf_approved_unit_price',
         verbose_name='Approved Unit Price'
+    )
+    arf_approved_value = models.DecimalField(
+        max_digits=16,
+        decimal_places=2,
+        null=True,
+        blank=True,
+        db_column='arf_approved_value',
+        verbose_name='Approved Value'
     )
     arf_rejection_reason = models.TextField(
         null=True,
@@ -840,10 +867,10 @@ class Order(models.Model):
         verbose_name = 'Order'
         verbose_name_plural = 'Orders'
         indexes = [
-            models.Index(fields=['ord_account_id'], name='idx_orders_account_id'),
-            models.Index(fields=['ord_owner_id'], name='idx_orders_owner_id'),
+            models.Index(fields=['ord_account_id'], name='idx_orders_account'),
+            models.Index(fields=['ord_owner_id'], name='idx_orders_owner'),
             models.Index(fields=['ord_status'], name='idx_orders_status'),
-            models.Index(fields=['ord_last_modified_date'], name='idx_orders_last_modified'),
+            models.Index(fields=['ord_effective_date'], name='idx_orders_effective_date'),
         ]
 
     def __str__(self):
@@ -885,6 +912,12 @@ class OrderLineItem(models.Model):
         blank=True,
         db_column='ori_product_code',
         verbose_name='Product Code'
+    )
+    ori_quantity = models.DecimalField(
+        max_digits=18,
+        decimal_places=2,
+        db_column='ori_quantity',
+        verbose_name='Quantity'
     )
     ori_unit_price = models.DecimalField(
         max_digits=18,

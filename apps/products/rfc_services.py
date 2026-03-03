@@ -393,7 +393,7 @@ def update_rfc(
 
         updated.append({
             "rfcId": row.arf_id,
-            "productId": str(row.arf_product_id_id),
+            "productId": str(row.arf_product_id),
             "month": month_str or f"{row.arf_forecast_date.year}-{row.arf_forecast_date.month:02d}",
         })
 

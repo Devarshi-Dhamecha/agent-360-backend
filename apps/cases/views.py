@@ -96,7 +96,7 @@ class CaseSummaryAPIView(APIView):
         opened_to_d = _parse_date(opened_to, 'opened_to')
 
         qs = Case.objects.all()
-        qs = qs.filter(cs_account_id_id=account_id)
+        qs = qs.filter(cs_account_id=account_id)
 
         # Apply date filters if provided
         if opened_from_d:
@@ -224,7 +224,7 @@ class CaseListAPIView(APIView):
                 Q(cs_subject__icontains=search) | Q(cs_case_number__icontains=search),
             )
         if account_id:
-            qs = qs.filter(cs_account_id_id=account_id)
+            qs = qs.filter(cs_account_id=account_id)
         if opened_from_d:
             qs = qs.filter(cs_sf_created_date__date__gte=opened_from_d)
         if opened_to_d:
@@ -305,8 +305,8 @@ class CaseCommentsAPIView(APIView):
             raise NotFound(ErrorMessages.CASE_NOT_FOUND)
 
         comments = (
-            CaseComment.objects.filter(cc_case_id_id=case_id)
-            .select_related('cc_agent_created_by', 'cc_sf_created_by_id')
+            CaseComment.objects.filter(cc_case_id=case_id)
+            .select_related('cc_agent_created_by')
             .order_by('-cc_id')
         )
         serializer = CaseCommentSerializer(comments, many=True)
@@ -369,8 +369,7 @@ class CaseTimelineAPIView(APIView):
             raise NotFound(ErrorMessages.CASE_NOT_FOUND)
 
         events = (
-            CaseHistory.objects.filter(ch_case_id_id=case_id)
-            .select_related('ch_created_by_id')
+            CaseHistory.objects.filter(ch_case_id=case_id)
             .order_by('-ch_created_date')
         )
         serializer = CaseTimelineSerializer(events, many=True)

@@ -26,4 +26,5 @@ class AccountListSerializer(serializers.ModelSerializer):
         ]
 
     def get_owner_id(self, obj):
-        return obj.acc_owner_id_id if obj.acc_owner_id_id else None
+        # Access the raw FK value without triggering object load
+        return getattr(obj, 'acc_owner_id_id', None)

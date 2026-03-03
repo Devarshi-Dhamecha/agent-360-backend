@@ -18,10 +18,8 @@ class TaskListSerializer(serializers.ModelSerializer):
         read_only=True,
     )
     owner_id = serializers.SerializerMethodField()
-    campaign_id = serializers.CharField(source="tsk_what_id_id", read_only=True)
-    what_id = serializers.CharField(source="tsk_what_id_id", read_only=True)
-    what_type = serializers.CharField(source="tsk_what_type", read_only=True)
-    what_name = serializers.CharField(source="tsk_what_name", read_only=True)
+    campaign_id = serializers.CharField(source="tsk_what_id", read_only=True)
+    what_id = serializers.CharField(source="tsk_what_id", read_only=True)
 
     class Meta:
         model = Task
@@ -34,12 +32,11 @@ class TaskListSerializer(serializers.ModelSerializer):
             "owner_id",
             "campaign_id",
             "what_id",
-            "what_type",
-            "what_name",
         ]
 
     def get_owner_id(self, obj):
-        return obj.tsk_owner_id_id if obj.tsk_owner_id_id else None
+        # Access the raw FK value without triggering object load
+        return getattr(obj, 'tsk_owner_id_id', None)
 
 
 class CampaignWithTasksSerializer(serializers.ModelSerializer):
@@ -78,10 +75,12 @@ class CampaignWithTasksSerializer(serializers.ModelSerializer):
         ]
 
     def get_owner_id(self, obj):
-        return obj.cmp_owner_id_id if obj.cmp_owner_id_id else None
+        # Access the raw FK value without triggering object load
+        return getattr(obj, 'cmp_owner_id_id', None)
 
     def get_account_id(self, obj):
-        return obj.cmp_account_id_id if obj.cmp_account_id_id else None
+        # Access the raw FK value without triggering object load
+        return getattr(obj, 'cmp_account_id_id', None)
 
     def get_tasks(self, obj):
         """

@@ -94,7 +94,6 @@ class Case(models.Model):
         verbose_name_plural = 'Cases'
         indexes = [
             models.Index(fields=['cs_account_id'], name='idx_cases_account'),
-            models.Index(fields=['cs_owner_id'], name='idx_cases_owner'),
             models.Index(fields=['cs_status'], name='idx_cases_status'),
         ]
 
@@ -138,12 +137,10 @@ class CaseHistory(models.Model):
         db_column='ch_created_date',
         verbose_name='Created Date'
     )
-    ch_created_by_id = models.ForeignKey(
-        'users.User',
-        to_field='usr_sf_id',
-        on_delete=models.RESTRICT,
+    ch_created_by_id = models.CharField(
+        max_length=18,
         db_column='ch_created_by_id',
-        verbose_name='Created By'
+        verbose_name='Created By ID'
     )
     ch_active = models.SmallIntegerField(
         default=1,
@@ -214,15 +211,12 @@ class CaseComment(models.Model):
         db_column='cc_sf_created_date',
         verbose_name='SF Created Date'
     )
-    cc_sf_created_by_id = models.ForeignKey(
-        'users.User',
-        to_field='usr_sf_id',
+    cc_sf_created_by_id = models.CharField(
+        max_length=18,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
-        related_name='cc_sf_created',
         db_column='cc_sf_created_by_id',
-        verbose_name='SF Created By'
+        verbose_name='SF Created By ID'
     )
     cc_last_modified_date = models.DateTimeField(
         null=True,
@@ -321,7 +315,6 @@ class CaseComment(models.Model):
         indexes = [
             models.Index(fields=['cc_case_id'], name='idx_case_comments_case'),
             models.Index(fields=['cc_sync_status'], name='idx_case_comments_sync_status'),
-            models.Index(fields=['cc_retry_count'], name='idx_case_comments_retry_count'),
         ]
 
     def __str__(self):

@@ -178,29 +178,12 @@ class Task(models.Model):
         verbose_name='Salesforce ID'
     )
     # Link to Campaign via Salesforce ID (cmp_sf_id)
-    tsk_what_id = models.ForeignKey(
-        'Campaign',
-        to_field='cmp_sf_id',
+    tsk_what_id = models.CharField(
+        max_length=18,
         null=True,
         blank=True,
-        on_delete=models.SET_NULL,
         db_column='tsk_what_id',
-        verbose_name='Campaign',
-        related_name='tasks',
-    )
-    tsk_what_type = models.CharField(
-        max_length=40,
-        null=True,
-        blank=True,
-        db_column='tsk_what_type',
-        verbose_name='What Type'
-    )
-    tsk_what_name = models.CharField(
-        max_length=255,
-        null=True,
-        blank=True,
-        db_column='tsk_what_name',
-        verbose_name='What Name'
+        verbose_name='What ID'
     )
     tsk_activity_date = models.DateField(
         null=True,
@@ -280,7 +263,7 @@ class Task(models.Model):
         indexes = [
             models.Index(fields=['tsk_owner_id'], name='idx_tasks_owner'),
             models.Index(fields=['tsk_status'], name='idx_tasks_status'),
-            models.Index(fields=['tsk_what_id', 'tsk_what_type'], name='idx_tasks_what'),
+            models.Index(fields=['tsk_what_id'], name='idx_tasks_campaign'),
         ]
 
     def __str__(self):
