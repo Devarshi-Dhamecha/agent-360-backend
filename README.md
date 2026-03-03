@@ -39,12 +39,7 @@ cp .env.example .env
 python manage.py migrate
 ```
 
-5. Create superuser:
-```bash
-python manage.py createsuperuser
-```
-
-6. Run development server:
+5. Run development server:
 ```bash
 python manage.py runserver
 ```
