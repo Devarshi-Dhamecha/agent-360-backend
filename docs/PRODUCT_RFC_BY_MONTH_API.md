@@ -1,18 +1,18 @@
-# Product RFC by Month API (Draft / Approved with Last Year)
+# Product RFC by Month API (Draft / Approved with Last Year) – Implementation Complete
 
 ## Overview
 
-API endpoint to fetch **Request For Change (RFC)** data by product and month range: **current year** **both** draft and approved quantity and value (RFC Qty, RFC Value) in the same response—frontend switches by data key—and **last year** quantity and value (LY Qty, LY Value) for the same period. Supports **multiple product IDs** and a **month range (from / to)**. Used to power the “Update RFC” UI (e.g. category Herbicides: select products, month range, view Draft/Approved, see LY and current year data). If month range is not provided, behaviour is defined by default rules below.
+API endpoint to fetch **Request For Change (RFC)** data by product and month range: **current year** **both** draft and approved quantity, value, and unit price (RFC Qty, RFC Value, RFC Unit Price) in the same response—frontend switches by data key—and **last year** quantity and value (LY Qty, LY Value) for the same period. Supports **multiple product IDs** and a **month range (from / to)**. Used to power the "Update RFC" UI (e.g. category Herbicides: select products, month range, view Draft/Approved, see LY and current year data). If month range is not provided, default range is current month through same month next year.
 
-## Confirmed API route (before implementation)
+## Confirmed API Route
 
 | Item | Value |
 |------|--------|
 | **Method** | `GET` |
 | **Full URL** | `/api/products/rfc-by-month/` |
 | **Django path** (in `apps/products/urls.py`) | `rfc-by-month/` |
-| **URL name** (optional) | `rfc_by_month` |
-| **Base** | `config/urls.py` mounts products at `api/products/`, so full path is `api/products/` + `rfc-by-month/` |
+| **URL name** | `rfc_by_month` |
+| **Base** | `config/urls.py` mounts products at `api/products/`, so full path is `api/products/rfc-by-month/` |
 
 **Example:** `GET /api/products/rfc-by-month/?account_id=001XXX&product_ids=PRD-001,PRD-002&from=2026-02&to=2026-09`
 
@@ -21,9 +21,10 @@ API endpoint to fetch **Request For Change (RFC)** data by product and month ran
 | Parameter     | Type   | Required | Format              | Description |
 |--------------|--------|----------|---------------------|-------------|
 | `account_id` | string | Yes      | Salesforce ID       | Account to scope all data (invoices, forecasts). |
-| `product_ids` | string | Yes      | Comma-separated IDs | One or more product Salesforce IDs (e.g. Roundup, Typhoon, Atranex). |
-| `from`       | string | No*      | YYYY-MM             | Start month of range (e.g. 2026-02). See section "When from / to are provided vs not provided". “When from / to not received”. |
-| `to`         | string | No*      | YYYY-MM             | End month of range (e.g. 2026-07). *See “When from / to not received”. |
+| `product_ids` | string | Yes      | Comma-separated IDs | One or more product Salesforce IDs (e.g. PRD-001, PRD-002). |
+| `from`       | string | No       | YYYY-MM             | Start month of range (e.g. 2026-02). Optional; default = current month. |
+| `to`         | string | No       | YYYY-MM             | End month of range (e.g. 2026-07). Optional; default = same month next year. |
+
 ### When from / to are provided vs not provided
 
 **Response includes both Draft and Approved:** The API always returns **both** Draft and Approved RFC data in the same response. The frontend switches/toggles using **data keys** (e.g. `draftRfcQty`/`draftRfcValue` vs `approvedRfcQty`/`approvedRfcValue` per month). No `view` query parameter is used.
@@ -41,7 +42,7 @@ Example: `from=2026-02&to=2026-09` → Current = Feb 2026 through Sep 2026; **LY
 ---
 
 **Case 2 – User does not enter `from` and/or `to`:**  
-**Calculate** the range from the **current month (today’s year and month)**:
+**Calculate** the range from the **current month (today's year and month)**:
 - **Current (RFC) period:** from = **current month**, to = **same month next year**.  
   Example: if today is Feb 2026 → **Feb 2026 – Feb 2027** (13 months).
 - **LY period:** Same window shifted back one year → **Feb 2025 – Feb 2026**.
@@ -63,18 +64,18 @@ GET /api/products/rfc-by-month/?account_id=001XXX&product_ids=PRD-001,PRD-002
 
 ---
 
-## Business Logic
+## Business Logic (Implemented)
 
 ### Data Sources
 
 - **Account:** `accounts.acc_sf_id` = `account_id` (scope for invoices and forecasts).
 - **Products:** `products.prd_sf_id` IN `product_ids`.
-- **Current year (RFC):** `arf_rolling_forecasts` – draft: `arf_draft_quantity`, `arf_draft_value`; approved: `arf_approved_quantity`, `arf_approved_value`; **rejection reason:** `arf_rejection_reason` (one per product/month when present, e.g. MAX when multiple rows). Key: `arf_account_id`, `arf_product_id`, `arf_forecast_date` (month).
+- **Current year (RFC):** `arf_rolling_forecasts` – draft: `arf_draft_quantity`, `arf_draft_unit_price`, `arf_draft_value`; approved: `arf_approved_quantity`, `arf_approved_unit_price`, `arf_approved_value`; **rejection reason:** `arf_rejection_reason` (one per product/month when present). Key: `arf_account_id`, `arf_product_id`, `arf_forecast_date` (month).
 - **Last year (LY):** `invoice_line_items` + `invoices` – `ili_quantity` (LY Qty), `ili_net_price` (LY Value). Same account and product; invoice date in **same calendar month range, previous year**.
 
 ### Last Year (LY) – Quantity and Value
 
-**Purpose:** “Last year Qty” (LY Qty) and “Last year Value” (LY Value) for the **same** window as the current (RFC) range, **shifted back one year** (e.g. current Feb 2026–Feb 2027 → LY Feb 2025–Feb 2026).
+**Purpose:** "Last year Qty" (LY Qty) and "Last year Value" (LY Value) for the **same** window as the current (RFC) range, **shifted back one year** (e.g. current Feb 2026–Feb 2027 → LY Feb 2025–Feb 2026).
 
 **Source:**
 
@@ -96,7 +97,6 @@ GET /api/products/rfc-by-month/?account_id=001XXX&product_ids=PRD-001,PRD-002
 - `invoices.inv_valid` = true
 - `invoices.inv_invoice_type` != 'Credit Note'
 - `invoice_line_items.ili_valid` = true
-- (Optional) exclude credit notes if stored differently; align with other product performance APIs.
 
 **Aggregation (per product, per month):**
 
@@ -104,28 +104,7 @@ GET /api/products/rfc-by-month/?account_id=001XXX&product_ids=PRD-001,PRD-002
   - **LY Qty:** `SUM(ili.ili_quantity)` for that product and that month (last year).
   - **LY Value:** `SUM(ili.ili_net_price)` for that product and that month (last year).
 
-If a product has no invoices in a given month last year, return 0 for that month’s LY Qty and LY Value.
-
-**Formula (date derivation):**
-
-```
-1. Resolve effective (from_date, to_date):
-   - If user entered from and to: from_date = first day of from_month, to_date = last day of to_month.
-     Example: from=2026-02, to=2026-09 → 2026-02-01 to 2026-09-30.
-   - If user did NOT enter from and/or to: from_date = first day of current month (today),
-     to_date = last day of same month next year.
-     Example: today = Feb 2026 → 2026-02-01 to 2027-02-28.
-
-2. Current (RFC) range: [from_date, to_date].
-
-3. Last year (LY) range: same window shifted back one year (always):
-   ly_from_date = from_date - 1 year
-   ly_to_date   = to_date   - 1 year
-
-   Examples:
-   - User entered Feb 2026–Sep 2026 → LY = Feb 2025–Sep 2025.
-   - Default (current month = Feb 2026) → current Feb 2026–Feb 2027, LY = Feb 2025–Feb 2026.
-```
+If a product has no invoices in a given month last year, return 0 for that month's LY Qty and LY Value.
 
 ---
 
@@ -135,55 +114,53 @@ If a product has no invoices in a given month last year, return 0 for that month
 
 **Source:**
 
-- **Draft:** `arf_rolling_forecasts.arf_draft_quantity`, `arf_rolling_forecasts.arf_draft_value`, `arf_rolling_forecasts.arf_draft_unit_price` (rows where status is Draft, Pending_Approval, Fixes_Needed, or as per business rules).
-- **Approved:** `arf_rolling_forecasts.arf_approved_quantity`, `arf_rolling_forecasts.arf_approved_value`, `arf_rolling_forecasts.arf_approved_unit_price` (rows where `arf_status` = 'Approved').
+- **Draft:** `arf_rolling_forecasts.arf_draft_quantity`, `arf_rolling_forecasts.arf_draft_unit_price`, `arf_rolling_forecasts.arf_draft_value` (rows where status is Draft, Pending_Approval, Fixes_Needed, or Approved).
+- **Approved:** `arf_rolling_forecasts.arf_approved_quantity`, `arf_rolling_forecasts.arf_approved_unit_price`, `arf_rolling_forecasts.arf_approved_value` (rows where `arf_status` = 'Approved').
 
 **Filters:**
 
 - `arf_rolling_forecasts.arf_account_id` = :account_id
 - `arf_rolling_forecasts.arf_product_id` IN :product_ids
 - `arf_rolling_forecasts.arf_forecast_date` BETWEEN :from_date AND :to_date (current year range)
-- **Draft aggregation:** Include forecast rows in Draft (and optionally Pending_Approval / Fixes_Needed) status; sum draft qty/value.
-- **Approved aggregation:** Include rows with `arf_status` = 'Approved'; sum approved qty/value.
-- (Optional) `arf_rolling_forecasts.arf_active` = 1 if the schema has such a flag.
+- `arf_rolling_forecasts.arf_active` = 1
 
 **Aggregation (per product, per month):**
 
 - For each product and each month in the range, return **both**:
-  - **Draft:** `draftRfcQty` = SUM(arf_draft_quantity), `draftRfcValue` = SUM(arf_draft_value), `draftRfcUnitPrice` = MAX(arf_draft_unit_price) (one per product/month; null when none)
-  - **Approved:** `approvedRfcQty` = SUM(arf_approved_quantity), `approvedRfcValue` = SUM(arf_approved_value), `approvedRfcUnitPrice` = MAX(arf_approved_unit_price) (one per product/month; null when none)
+  - **Draft:** `draftRfcQty` = SUM(arf_draft_quantity), `draftRfcValue` = SUM(arf_draft_quantity * arf_draft_unit_price), `draftRfcUnitPrice` = MAX(arf_draft_unit_price) (one per product/month; null when none)
+  - **Approved:** `approvedRfcQty` = SUM(arf_approved_quantity), `approvedRfcValue` = SUM(arf_approved_quantity * arf_approved_unit_price), `approvedRfcUnitPrice` = MAX(arf_approved_unit_price) (one per product/month; null when none)
 
-If there is no forecast row for a product in a given month, return 0 (or null; document which) for that month’s draft and approved qty/value, and null for unit prices.
+If there is no forecast row for a product in a given month, return 0 for that month's draft and approved qty/value, and null for unit prices.
 
 **Formula:**
 
 ```
-draftRfcQty        = SUM(arf_draft_quantity)    per product/month (Draft-status rows)
-draftRfcValue      = SUM(arf_draft_value)      per product/month
+draftRfcQty        = SUM(arf_draft_quantity)    per product/month
+draftRfcValue      = SUM(arf_draft_quantity * arf_draft_unit_price) per product/month
 draftRfcUnitPrice  = MAX(arf_draft_unit_price) per product/month (null when none)
-approvedRfcQty     = SUM(arf_approved_quantity) per product/month (Approved-status rows)
-approvedRfcValue   = SUM(arf_approved_value)   per product/month
+approvedRfcQty     = SUM(arf_approved_quantity) per product/month
+approvedRfcValue   = SUM(arf_approved_quantity * arf_approved_unit_price) per product/month
 approvedRfcUnitPrice = MAX(arf_approved_unit_price) per product/month (null when none)
 ```
 
 ---
 
-### Month Range and “Same Period Last Year”
+### Month Range and "Same Period Last Year"
 
 - **Month range:** From and To are inclusive (first day of start month to last day of end month).
 - **Last year range:** Same start and end **months**, previous **year**. No shift of months; only year is decremented by 1.
-- **Per-month breakdown:** Response includes each month with LY Qty, LY Value, **and both** Draft (draftRfcQty, draftRfcValue) and Approved (approvedRfcQty, approvedRfcValue) so the frontend can toggle by key.
+- **Per-month breakdown:** Response includes each month with LY Qty, LY Value, **and both** Draft (draftRfcQty, draftRfcValue, draftRfcUnitPrice) and Approved (approvedRfcQty, approvedRfcValue, approvedRfcUnitPrice) so the frontend can toggle by key.
 
 ---
 
 ### Edge Cases
 
 - **No invoices last year for a product/month:** LY Qty = 0, LY Value = 0.
-- **No forecast for a product/month (current year):** Draft/Approved Qty and Value = 0 (or null; document which).
-- **Empty product_ids:** Return 400/422 or empty data structure; document.
+- **No forecast for a product/month (current year):** Draft/Approved Qty and Value = 0; Unit Price = null.
+- **Empty product_ids:** Return 422 validation error.
 - **Invalid from/to (e.g. to before from):** Return 422 with a clear message.
-- **Invalid product_ids (non-existent):** Either exclude and return data for valid IDs only, or return 404/422; document.
-- **Account has no data:** Return structure with zeros (or empty rows) for all requested products and months.
+- **Invalid product_ids (non-existent):** Return 422 validation error.
+- **Account has no data:** Return structure with zeros for all requested products and months.
 
 ---
 
@@ -197,6 +174,7 @@ Response includes **accountId**, **from**, **to**, **currencySymbol**, and **pro
 - **draftRfcQty**, **draftRfcValue**, **draftRfcUnitPrice** – current year draft RFC (unit price per product/month; null when none)
 - **approvedRfcQty**, **approvedRfcValue**, **approvedRfcUnitPrice** – current year approved RFC (unit price per product/month; null when none)
 - **rejectionReason** – optional; from `arf_rolling_forecasts.arf_rejection_reason` (one per product/month when present; null when none)
+- **rfcId** – RFC ID for reference
 
 Example (frontend uses `draftRfcQty`/`draftRfcValue` or `approvedRfcQty`/`approvedRfcValue` to show Draft vs Approved view):
 
@@ -215,27 +193,29 @@ Example (frontend uses `draftRfcQty`/`draftRfcValue` or `approvedRfcQty`/`approv
         "productName": "Roundup",
         "months": [
           {
+            "rfcId": 12345,
             "month": "2026-02",
             "monthLabel": "February 2026",
-            "lyQty": 0,
+            "lyQty": 0.0,
             "lyValue": 35000.00,
-            "draftRfcQty": 250,
+            "draftRfcQty": 250.0,
             "draftRfcValue": 225000.00,
             "draftRfcUnitPrice": 900.00,
-            "approvedRfcQty": 240,
+            "approvedRfcQty": 240.0,
             "approvedRfcValue": 216000.00,
             "approvedRfcUnitPrice": 900.00,
             "rejectionReason": null
           },
           {
+            "rfcId": 12346,
             "month": "2026-03",
             "monthLabel": "March 2026",
-            "lyQty": 0,
+            "lyQty": 0.0,
             "lyValue": 35000.00,
-            "draftRfcQty": 280,
+            "draftRfcQty": 280.0,
             "draftRfcValue": 252000.00,
             "draftRfcUnitPrice": 900.00,
-            "approvedRfcQty": 270,
+            "approvedRfcQty": 270.0,
             "approvedRfcValue": 243000.00,
             "approvedRfcUnitPrice": 900.00,
             "rejectionReason": "Insufficient supporting market data"
@@ -273,7 +253,7 @@ Example (frontend uses `draftRfcQty`/`draftRfcValue` or `approvedRfcQty`/`approv
 }
 ```
 
-#### 422 – Invalid month range (if from/to required or validated)
+#### 422 – Invalid month range (to before from)
 
 ```json
 {
@@ -304,30 +284,30 @@ Example (frontend uses `draftRfcQty`/`draftRfcValue` or `approvedRfcQty`/`approv
 ### Layer Structure
 
 ```
-Controller (views.py)
+Controller (RfcByMonthAPIView in views.py)
     ↓
-Service (e.g. rfc_by_month_services.py or in existing analytics_services)
+Service (get_rfc_by_month() in rfc_services.py)
     ↓
-Models / Raw SQL: Invoice, InvoiceLineItem, ArfRollingForecast, Product
+Models: Invoice, InvoiceLineItem, ArfRollingForecast, Product
 ```
 
 ### Components
 
-1. **Controller**
-   - Parse query params: `account_id`, `product_ids` (split comma-separated or accept repeated param), `from`, `to`.
+1. **Controller (RfcByMonthAPIView)**
+   - Parse query params: `account_id`, `product_ids` (comma-separated), `from`, `to`.
    - **Resolve range:** If from and to provided, use them (current = that range; LY = same range − 1 year). If not, default = current month through same month next year; LY = that window − 1 year.
    - Validate month range (from ≤ to, YYYY-MM format).
    - Call service; return standardized response (success, message, data) with **both** draft and approved data.
 
-2. **Service**
+2. **Service (get_rfc_by_month)**
    - Compute **last year** date range (same months, year - 1).
    - **LY:** Query invoice_line_items + invoices for account, product_ids, LY date range; aggregate by product and month (SUM ili_quantity, SUM ili_net_price).
-   - **Current year:** Query arf_rolling_forecasts for account, product_ids, current year date range; aggregate **both** draft (arf_draft_quantity, arf_draft_value, MAX(arf_draft_unit_price)) and approved (arf_approved_quantity, arf_approved_value, MAX(arf_approved_unit_price)) by product and month, so each month has draftRfcQty, draftRfcValue, draftRfcUnitPrice, approvedRfcQty, approvedRfcValue, approvedRfcUnitPrice.
+   - **Current year:** Query arf_rolling_forecasts for account, product_ids, current year date range; aggregate **both** draft (SUM arf_draft_quantity, SUM(arf_draft_quantity * arf_draft_unit_price), MAX(arf_draft_unit_price)) and approved (SUM arf_approved_quantity, SUM(arf_approved_quantity * arf_approved_unit_price), MAX(arf_approved_unit_price)) by product and month, so each month has draftRfcQty, draftRfcValue, draftRfcUnitPrice, approvedRfcQty, approvedRfcValue, approvedRfcUnitPrice.
    - Build list of months in range; for each product and month, attach LY, draft RFC, and approved RFC values (use 0 when no data; null for unit price when none).
    - Resolve currency symbol from account (e.g. acc_currency_iso_code) and attach to response.
 
-3. **Data access**
-   - Prefer single (or few) aggregated queries per “year” (LY vs current) to avoid N+1. Group by product_id and month (e.g. DATE_TRUNC('month', date)) for both invoices and forecasts.
+3. **Data Access**
+   - Prefer aggregated queries per "year" (LY vs current) to avoid N+1. Group by product_id and month (e.g. DATE_TRUNC('month', date)) for both invoices and forecasts.
 
 ---
 
@@ -337,7 +317,7 @@ Relevant for performance:
 
 - **invoices:** `inv_account_id`, `inv_invoice_date`, `inv_status`, `inv_valid`
 - **invoice_line_items:** `ili_invoice_id`, `ili_product_id`, `ili_valid`
-- **arf_rolling_forecasts:** `arf_account_id`, `arf_product_id`, `arf_forecast_date`, `arf_status`
+- **arf_rolling_forecasts:** `arf_account_id`, `arf_product_id`, `arf_forecast_date`, `arf_status`, `arf_active`
 - **products:** `prd_sf_id`
 
 ---
@@ -345,65 +325,44 @@ Relevant for performance:
 ## Performance Considerations
 
 1. **Multiple product IDs:** Use `IN (:product_ids)` and keep product list size reasonable; consider a limit (e.g. max 50) and document it.
-2. **Month range:** Limit range (e.g. max 12 or 24 months) to avoid very large payloads; document.
+2. **Month range:** Limit range (e.g. max 24 months) to avoid very large payloads; document.
 3. **Aggregation:** Do SUM and GROUP BY product, month in the database; avoid loading raw rows and aggregating in Python.
 4. **Two time windows:** One set of queries for last year (invoices), one for current year (forecasts); can be two queries or CTEs in one SQL.
 
 ---
 
-## Implementation Checklist
+## Implementation Checklist (Completed)
 
-- [ ] Define endpoint path and method (GET).
-- [ ] Implement **both cases**: (1) When user enters from and to, use that range; LY = same months previous year (e.g. Feb–Sep 2026 → LY Feb–Sep 2025). (2) When from/to not received, default = current month through same month next year; LY = that window back one year.
-- [ ] Parse and validate **account_id**, **product_ids** (multiple), **from**, **to**, **view**.
-- [ ] Implement **last year** logic: same month range, previous year; source invoice_line_items (ili_quantity, ili_net_price); filters (Closed, valid, no Credit Note); aggregate by product and month.
-- [ ] Implement **current year** logic: arf_rolling_forecasts; return **both** Draft and Approved (draftRfcQty, draftRfcValue, draftRfcUnitPrice, approvedRfcQty, approvedRfcValue, approvedRfcUnitPrice) per product and month.
-- [ ] Build response: list of products, each with list of months and lyQty, lyValue, draftRfcQty, draftRfcValue, draftRfcUnitPrice, approvedRfcQty, approvedRfcValue, approvedRfcUnitPrice.
-- [ ] Use 0 (or null) for missing LY or RFC data per product/month.
-- [ ] Add currency symbol from account.
-- [ ] Add error responses (422) for validation.
-- [ ] Add indexes if missing; consider limits on product count and month range.
+- [x] Define endpoint path and method (GET).
+- [x] Implement **both cases**: (1) When user enters from and to, use that range; LY = same months previous year. (2) When from/to not received, default = current month through same month next year; LY = that window back one year.
+- [x] Parse and validate **account_id**, **product_ids** (multiple), **from**, **to**.
+- [x] Implement **last year** logic: same month range, previous year; source invoice_line_items (ili_quantity, ili_net_price); filters (Closed/Posted, valid, no Credit Note); aggregate by product and month.
+- [x] Implement **current year** logic: arf_rolling_forecasts; return **both** Draft and Approved (draftRfcQty, draftRfcValue, draftRfcUnitPrice, approvedRfcQty, approvedRfcValue, approvedRfcUnitPrice) per product and month.
+- [x] Build response: list of products, each with list of months and lyQty, lyValue, draftRfcQty, draftRfcValue, draftRfcUnitPrice, approvedRfcQty, approvedRfcValue, approvedRfcUnitPrice, rfcId, rejectionReason.
+- [x] Use 0 for missing LY or RFC data per product/month; null for unit prices when none.
+- [x] Add currency symbol from account.
+- [x] Add error responses (422) for validation.
+- [x] Serializers: `RfcByMonthResponseSerializer`, `RfcByMonthProductSerializer`, `RfcByMonthItemSerializer`.
+- [x] Docs/OpenAPI schema updated with request/response examples.
 
 ---
 
 ## Notes
 
-- **Only future months can be edited:** This applies to the **Update RFC** (save) flow, not necessarily to this GET. When implementing PUT/PATCH for “Save RFC”, enforce “only future months can be edited” in the service/validation layer.
+- **Only future months can be edited:** This applies to the **Update RFC** (PATCH) flow, not to this GET. When using the Update RFC API, only future months can be edited.
 - **Both Draft and Approved in one response:** The API returns both draft and approved RFC data; the frontend toggles using data keys (`draftRfcQty`/`draftRfcValue` vs `approvedRfcQty`/`approvedRfcValue`) without a second request.
-- **Alignment with Update RFC UI:** The response supports the Update RFC screen: multiple products, month range, LY Qty, LY Value, and both Draft and Approved RFC Qty/Value per month.
-- This document should be treated as the single source of truth for the “RFC by month” (with last year) API before implementation.
+- **Alignment with Update RFC API:** The response supports the Update RFC screen: multiple products, month range, LY Qty, LY Value, and both Draft and Approved RFC Qty/Value/Unit Price per month. After updating via PATCH, the next GET will reflect the new draft quantities and recalculated draft values.
+- **Draft value calculation:** Draft value is calculated on retrieval as SUM(arf_draft_quantity * arf_draft_unit_price) per product/month, not stored on update.
 
 ---
 
-## Finding account_id and product_id that return non-zero data
+## Document Control
 
-To get **lyQty/lyValue** or **draftRfcQty/approvedRfcQty** non-zero, use an account and product that have invoices (Closed) or forecasts in the relevant date range. Run this in your DB to get one pair (adjust the date range if needed; below uses a 13‑month window from current month):
-
-```sql
--- One account_id + product_id pair that has either LY invoice data or RFC forecast data
-SELECT acc_sf_id AS account_id, prd_sf_id AS product_id
-FROM accounts a
-CROSS JOIN LATERAL (
-  SELECT ili.ili_product_id AS prd_sf_id
-  FROM invoice_line_items ili
-  INNER JOIN invoices inv ON inv.inv_sf_id = ili.ili_invoice_id
-  WHERE inv.inv_account_id = a.acc_sf_id
-    AND inv.inv_status = 'Closed' AND inv.inv_valid = TRUE
-    AND inv.inv_invoice_date BETWEEN (date_trunc('month', current_date) - interval '1 year')::date
-      AND (date_trunc('month', current_date) + interval '1 year' - interval '1 day')::date
-  LIMIT 1
-) ly
-LIMIT 1
-;
--- If no LY data, try an account that has forecasts:
-SELECT arf.arf_account_id AS account_id, arf.arf_product_id AS product_id
-FROM arf_rolling_forecasts arf
-WHERE arf.arf_active = 1
-  AND arf.arf_forecast_date >= date_trunc('month', current_date)::date
-  AND arf.arf_forecast_date <= (date_trunc('month', current_date) + interval '1 year')::date
-LIMIT 1
-;
-```
-
-Use the returned `account_id` and `product_id` in the API:  
-`GET /api/products/rfc-by-month/?account_id=<account_id>&product_ids=<product_id>`
+- **Purpose:** Specification and implementation reference for the RFC by Month API.  
+- **Status:** Implementation Complete.
+- **Related docs:** 
+  - `PRODUCT_UPDATE_RFC_API.md` (PATCH Update RFC).
+  - `apps/products/views.py` (RfcByMonthAPIView).
+  - `apps/products/rfc_services.py` (get_rfc_by_month function).
+  - `apps/products/serializers.py` (RfcByMonth* serializers).
+- **Last updated:** March 2026.
